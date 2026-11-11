@@ -1,8 +1,8 @@
 /**
- * Site-Visit Review consensus + second-site-visitor (SV2) selection.
+ * Non-compliant summary consensus + second-site-visitor (SV2) selection.
  *
  * - CONSENSUS is a lead/admin-only popup tool on the Reader Report, served by
- *   GET /site-visit-review: per standard, which readers marked it non-compliant
+ *   GET /non-compliant-summary: per standard, which readers marked it non-compliant
  *   (agreed it's a problem) vs compliant (disagreed). It is NOT on the
  *   compilation page and NOT on / in the Lead Reader Report.
  * - SITE VISITORS: lead is always SV1; the lead designates ONE additional
@@ -35,7 +35,7 @@ function rows(marks: Array<[string, string, 'compliant' | 'noncompliant']>) {
   return marks.map(([standardCode, specCode, mark]) => ({ standardCode, specCode, mark, comment: '' }));
 }
 
-describe('Site-Visit Review consensus + SV2 selection', () => {
+describe('Non-compliant summary consensus + SV2 selection', () => {
   let token: string;
   let readerToken: string;
   let submissionId: string;
@@ -67,9 +67,9 @@ describe('Site-Visit Review consensus + SV2 selection', () => {
     readerToken = signTokenFor(readerA);
   });
 
-  it('GET /site-visit-review ranks non-compliant first and names who agreed / who disagreed', async () => {
+  it('GET /non-compliant-summary ranks non-compliant first and names who agreed / who disagreed', async () => {
     const res = await request(app)
-      .get(`/api/submissions/${submissionId}/site-visit-review`)
+      .get(`/api/submissions/${submissionId}/non-compliant-summary`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.totalReaders).toBe(3);
@@ -92,9 +92,9 @@ describe('Site-Visit Review consensus + SV2 selection', () => {
     expect(by['1'].compliantReaders).toEqual(expect.arrayContaining(['Lauri Lead', 'Annie Reader']));
   });
 
-  it('GET /site-visit-review is lead/admin only (a reader is 403)', async () => {
+  it('GET /non-compliant-summary is lead/admin only (a reader is 403)', async () => {
     const res = await request(app)
-      .get(`/api/submissions/${submissionId}/site-visit-review`)
+      .get(`/api/submissions/${submissionId}/non-compliant-summary`)
       .set('Authorization', `Bearer ${readerToken}`);
     expect(res.status).toBe(403);
   });
@@ -146,7 +146,7 @@ describe('Site-Visit Review consensus + SV2 selection', () => {
     await ReaderReport.create({ submissionId: sub._id, reviewerId: r._id, rows: [{ standardCode: '5', specCode: 'a', mark: '', comment: '' }] } as any);
 
     const res = await request(app)
-      .get(`/api/submissions/${sub._id}/site-visit-review`)
+      .get(`/api/submissions/${sub._id}/non-compliant-summary`)
       .set('Authorization', `Bearer ${signTokenFor(l2)}`);
     expect(res.status).toBe(200);
     expect(res.body.totalReaders).toBe(0);

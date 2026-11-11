@@ -937,16 +937,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     } catch { /* file not ready — button no-ops */ }
   }, [submissionId]);
 
-  // Fetch reviewer's scores for this submission (reviewers only)
-  const { data: scoresData } = useQuery<{ scores: { standardCode: string; specCode: string; score: number }[] }>({
-    queryKey: ['scores', submissionId],
-    queryFn: async () => {
-      const response = await api.get(`/api/submissions/${submissionId}/scores`);
-      return response.data;
-    },
-    enabled: isReviewer,
-  });
-
   // Fetch comment summary for this submission (reviewers only)
   const { data: commentSummary } = useQuery<{ total: number; unresolved: number }>({
     queryKey: ['comment-summary', submissionId, selectedStandard, selectedSpec],
@@ -958,31 +948,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     },
     enabled: isReviewer,
   });
-
-  // Score mutation (upsert)
-  const scoreMutation = useMutation({
-    mutationFn: async ({ standardCode, specCode, score }: { standardCode: string; specCode: string; score: number }) => {
-      await api.put(`/api/submissions/${submissionId}/scores`, { standardCode, specCode, score });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scores', submissionId] });
-    },
-  });
-
-  // Score delete mutation (clear score = "-")
-  const scoreDeleteMutation = useMutation({
-    mutationFn: async ({ standardCode, specCode }: { standardCode: string; specCode: string }) => {
-      await api.delete(`/api/submissions/${submissionId}/scores`, { data: { standardCode, specCode } });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scores', submissionId] });
-    },
-  });
-
-  // Get current score for active substandard
-  const currentScore = scoresData?.scores?.find(
-    (s) => s.standardCode === selectedStandard && s.specCode === selectedSpec
-  );
 
   // Fetch global comment summary for Prev/Next navigation (reviewers only)
   const { data: globalCommentSummary } = useQuery<{
@@ -3042,35 +3007,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   Comment
                 </button>
 
-                {/* Score Control */}
-                <div data-tour="ss-score" className="flex items-center gap-1 text-sm text-gray-600">
-                  <span className="font-medium">Score</span>
-                  {['-', '0', '1', '2', '3'].map((val) => {
-                    const isActive = val === '-'
-                      ? currentScore === undefined
-                      : currentScore?.score === Number(val);
-                    return (
-                      <button
-                        key={val}
-                        onClick={() => {
-                          if (!selectedSpec) return;
-                          if (val === '-') {
-                            scoreDeleteMutation.mutate({ standardCode: selectedStandard, specCode: selectedSpec });
-                          } else {
-                            scoreMutation.mutate({ standardCode: selectedStandard, specCode: selectedSpec, score: Number(val) });
-                          }
-                        }}
-                        className={`w-7 h-7 rounded text-xs font-semibold border transition-colors ${
-                          isActive
-                            ? 'bg-teal-600 text-white border-teal-600'
-                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        {val}
-                      </button>
-                    );
-                  })}
-                </div>
               </>
             )}
           </div>

@@ -175,7 +175,6 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       anchorStep('[data-tour="ss-toolbar"]', 'tour.ss.toolbar', translate, 'bottom'),
       anchorStep('[data-tour="ss-evidence-text"]', 'tour.ss.evidenceText', translate, 'top'),
       // Reader-only — the 0-3 score control + the comments rail on the right.
-      anchorStep('[data-tour="ss-score"]', 'tour.ss.score', translate, 'bottom'),
       anchorStep('[data-tour="ss-comments"]', 'tour.ss.comments', translate, 'left'),
       anchorStep('[data-tour="ss-clear"]', 'tour.ss.clear', translate, 'top'),
       anchorStep('[data-tour="ss-save"]', 'tour.ss.save', translate, 'top'),

@@ -250,7 +250,7 @@ const EDITABLE_FIELDS = [
   'vpaRecipients', 'contactInfo', 'accreditationStatus', 'initialAccreditationDate',
   'lastReaccreditationDate', 'siteVisitDate', 'noSiteVisitRequired', 'programDescription',
   'strengthsFromSelfStudy', 'strengthsFromSiteVisit', 'nonComplianceText',
-  'requiredCoursesOverride', 'secondSiteVisitorName', 'recommendation', 'conditionalRequirements',
+  'requiredCoursesOverride', 'secondSiteVisitorName', 'recommendation',
   'holdExplanation', 'additionalRecommendations', 'nextSelfStudySuggestions', 'submittedByName',
   'submissionDate',
 ] as const;
@@ -267,6 +267,11 @@ export async function saveLeadReaderReport(req: AuthenticatedRequest, res: Respo
   const set: Record<string, any> = { updatedBy: req.user?.id };
   for (const f of EDITABLE_FIELDS) {
     if (req.body[f] !== undefined) set[f] = req.body[f];
+  }
+  // Conditional accreditation is no longer a Council recommendation (Lauri, Nov 2026).
+  if (set.recommendation === 'conditional') {
+    res.status(400).json({ error: 'Conditional accreditation is no longer a recommendation option.' });
+    return;
   }
   const saved = await LeadReaderReport.findOneAndUpdate(
     { submissionId: submission._id },
@@ -312,16 +317,16 @@ export async function downloadLeadReaderReport(req: AuthenticatedRequest, res: R
 }
 
 /**
- * GET /api/submissions/:submissionId/site-visit-review
- * Site-Visit Review consensus — per standard, which readers marked it
+ * GET /api/submissions/:submissionId/non-compliant-summary
+ * Non-compliant summary consensus — per standard, which readers marked it
  * non-compliant vs compliant (who agreed / who didn't). Lead reader / admin
  * only (readers must never see other readers' verdicts), gated the same way as
- * the Lead Reader Report. Powers the "Site-Visit Review" popup on the Reader
+ * the Lead Reader Report. Powers the "Non-compliant summary" popup on the Reader
  * Report; it is a review tool and is NOT printed on any report.
  */
 export async function getSiteVisitReview(req: AuthenticatedRequest, res: Response): Promise<void> {
   if (!isLeadOrAdmin(req)) {
-    res.status(403).json({ error: 'Only a lead reader or admin may open the Site-Visit Review.' });
+    res.status(403).json({ error: 'Only a lead reader or admin may open the Non-compliant summary.' });
     return;
   }
   const submission = await requireSubmissionAccess(req as any, res, req.params.submissionId);

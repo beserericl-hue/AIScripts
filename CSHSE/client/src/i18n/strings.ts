@@ -117,8 +117,6 @@ const STRINGS = {
     "Supporting File Library holds every file you uploaded — CVs, syllabi, papers. Click here to see them.",
   'tour.ss.readerReport':
     "Reader Report opens your compliance checklist on its own screen — mark each standard Compliant or Non-Compliant, add comments, and save. Come back here to read and comment on the self-study.",
-  'tour.ss.score':
-    "Score this part on the 0–3 scale as you review it. Your score is saved automatically.",
   'tour.ss.comments':
     "Comments on this part appear here on the right. Select text in the narrative and click Comment to add your own.",
   // tour.rr.* — the Reader Report editor screen
@@ -153,7 +151,7 @@ const STRINGS = {
   'tour.rr.chatWindow':
     "This is the chat window. Every comment from every reader and the lead reader shows here, grouped by part. Reply, mark them resolved, or click one to jump to it. Use the Comments button up top to hide or show it.",
   'tour.rr.vote':
-    "Cast your vote on the program: Accept, Conditional, Deny, or Hold. The lead reader tallies every reader's vote.",
+    "Cast your vote on the program: Accept, Deny, or Hold. The lead reader tallies every reader's vote.",
   'tour.rr.recommendation':
     "Write your overall recommendation to the Council here — the decision and why.",
   'tour.rr.lastStep':

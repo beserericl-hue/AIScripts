@@ -10,7 +10,7 @@ import { SpecFilesMenu, type SpecEvidence } from './SpecFilesMenu';
 import { SpecMatrixModal } from './SpecMatrixModal';
 import RequiredDocuments from '../../components/RequiredDocuments';
 
-// Site-Visit Review — per-standard reader agreement (who marked it
+// Non-compliant summary — per-standard reader agreement (who marked it
 // non-compliant vs compliant). Lead/admin only; shown in a popup, never printed.
 interface SiteVisitStandard {
   standardCode: string;
@@ -78,7 +78,8 @@ interface ReportRow {
   readerComment: string;
   specs: ReportSpec[];
 }
-type AcceptanceVote = 'accept' | 'conditional' | 'deny' | 'hold' | '';
+// Conditional accreditation was removed from the Council recommendation (Lauri, Nov 2026).
+type AcceptanceVote = 'accept' | 'deny' | 'hold' | '';
 interface ReportData {
   institutionName: string;
   programName: string;
@@ -108,7 +109,6 @@ interface ReaderReportListItem {
 }
 const VOTE_OPTIONS: { value: Exclude<AcceptanceVote, ''>; label: string; cls: string }[] = [
   { value: 'accept', label: 'Accept', cls: 'border-emerald-300 bg-emerald-50 text-emerald-800' },
-  { value: 'conditional', label: 'Conditional', cls: 'border-amber-300 bg-amber-50 text-amber-800' },
   { value: 'deny', label: 'Deny', cls: 'border-red-300 bg-red-50 text-red-800' },
   { value: 'hold', label: 'Hold', cls: 'border-slate-300 bg-slate-50 text-slate-700' },
 ];
@@ -436,43 +436,18 @@ export function ReaderReportEditor(): JSX.Element {
     refetchOnWindowFocus: false,
   });
   const roster = listQuery.data?.reports || [];
-  const tally = listQuery.data?.tally || { accept: 0, conditional: 0, deny: 0, hold: 0 };
+  const tally = listQuery.data?.tally || { accept: 0, deny: 0, hold: 0 };
 
-  // Site-Visit Review popup (lead/admin): per-standard who-agreed / who-didn't.
+  // Non-compliant summary popup (lead/admin): per-standard who-agreed / who-didn't.
   const [svrOpen, setSvrOpen] = useState(false);
   const [svrFilter, setSvrFilter] = useState<'noncompliant' | 'compliant' | 'all'>('noncompliant');
-  // Site-Visit Review consensus — fetched only when the lead opens the popup.
+  // Non-compliant summary consensus — fetched only when the lead opens the popup.
   const svrQuery = useQuery({
-    queryKey: ['site-visit-review', submissionId],
+    queryKey: ['non-compliant-summary', submissionId],
     queryFn: async () =>
-      (await api.get(`/api/submissions/${submissionId}/site-visit-review`)).data as SiteVisitReview,
+      (await api.get(`/api/submissions/${submissionId}/non-compliant-summary`)).data as SiteVisitReview,
     enabled: !!submissionId && isLeadOrAdmin && svrOpen,
     refetchOnWindowFocus: false,
-  });
-
-  // Per-spec 0–3 rubric Score (same model as the self-study reviewer score).
-  // When viewing another reviewer's report, show THEIR scores (read-only).
-  const scoresQuery = useQuery({
-    queryKey: ['scores', submissionId, viewReviewerId],
-    queryFn: async () => {
-      const qs = viewReviewerId ? `?reviewerId=${encodeURIComponent(viewReviewerId)}` : '';
-      const r = await api.get(`/api/submissions/${submissionId}/scores${qs}`);
-      return (r.data?.scores || []) as { standardCode: string; specCode: string; score: number }[];
-    },
-    enabled: !!submissionId,
-    refetchOnWindowFocus: false,
-  });
-  const scoreFor = (std: string, spec: string): number | undefined =>
-    (scoresQuery.data || []).find((s) => s.standardCode === std && s.specCode === spec)?.score;
-  const saveScore = useMutation({
-    mutationFn: async ({ std, spec, score }: { std: string; spec: string; score: number | null }) => {
-      if (score === null) {
-        await api.delete(`/api/submissions/${submissionId}/scores`, { data: { standardCode: std, specCode: spec } });
-      } else {
-        await api.put(`/api/submissions/${submissionId}/scores`, { standardCode: std, specCode: spec, score });
-      }
-    },
-    onSuccess: () => scoresQuery.refetch(),
   });
 
   const save = useMutation({
@@ -719,16 +694,16 @@ export function ReaderReportEditor(): JSX.Element {
         </div>
         <div className="flex items-center gap-2">
           {savedAt && <span className="text-xs text-emerald-600 inline-flex items-center gap-1"><Check className="h-3.5 w-3.5" />Saved</span>}
-          {/* Lead/admin: open the Site-Visit Review popup (who agreed / who
+          {/* Lead/admin: open the Non-compliant summary popup (who agreed / who
               didn't on each standard). A review tool — never printed. */}
           {isLeadOrAdmin && (
             <button
-              data-testid="rr-site-visit-review"
+              data-testid="rr-noncompliant-summary"
               onClick={() => setSvrOpen(true)}
               className="inline-flex items-center gap-1 rounded bg-teal-600 px-2.5 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
               title="See which readers found each standard non-compliant vs compliant"
             >
-              <ClipboardCheck className="h-4 w-4" />Site-Visit Review
+              <ClipboardCheck className="h-4 w-4" />Non-compliant summary
             </button>
           )}
           {/* Full-screen focus mode — hide the app + section menus, keep the
@@ -1368,27 +1343,6 @@ export function ReaderReportEditor(): JSX.Element {
                             <Grid3X3 className="h-3.5 w-3.5" />Matrix
                           </button>
                         </div>
-                        {/* 0–3 rubric Score (same as the self-study reviewer score). */}
-                        <div className="flex items-center gap-1.5 border-t border-slate-100 pt-2">
-                          <span className="text-xs font-semibold text-slate-600">Score</span>
-                          {(['-', 0, 1, 2, 3] as const).map((v) => {
-                            const cur = scoreFor(r.code, sp.specCode);
-                            const isClear = v === '-';
-                            const active = !isClear && cur === v;
-                            return (
-                              <button
-                                key={String(v)}
-                                data-testid={`rr-score-${r.code}-${sp.specCode}-${v}`}
-                                disabled={readonly || saveScore.isPending}
-                                onClick={() => saveScore.mutate({ std: r.code, spec: sp.specCode, score: isClear ? null : (v as number) })}
-                                className={`h-6 w-6 rounded text-xs font-semibold disabled:opacity-50 ${active ? 'bg-teal-600 text-white' : 'border border-slate-300 text-slate-600 hover:bg-slate-50'}`}
-                                title={isClear ? 'Clear score' : `Score ${v}`}
-                              >
-                                {v}
-                              </button>
-                            );
-                          })}
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -1477,7 +1431,7 @@ export function ReaderReportEditor(): JSX.Element {
           value={recommendation}
           onChange={(e) => setRecommendationDirty(e.target.value)}
           readOnly={readonly}
-          placeholder="Overall recommendation (e.g. accreditation with no conditions / conditional / deny / hold) and rationale."
+          placeholder="Overall recommendation (accreditation with no conditions / deny / hold) and rationale."
           rows={4}
           className={`w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}
         />
@@ -1533,14 +1487,14 @@ export function ReaderReportEditor(): JSX.Element {
         />
       )}
 
-      {/* Site-Visit Review popup (lead/admin) — per standard, who marked it
+      {/* Non-compliant summary popup (lead/admin) — per standard, who marked it
           non-compliant vs compliant. Filterable; a review tool, never printed. */}
       {svrOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSvrOpen(false)}>
           <div data-testid="rr-svr-modal" className="flex max-h-[88vh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
               <div>
-                <h3 className="text-base font-semibold text-slate-900">Site-Visit Review</h3>
+                <h3 className="text-base font-semibold text-slate-900">Non-compliant summary</h3>
                 <p className="text-xs text-slate-500">{data.institutionName} · who agreed and who didn’t, by standard</p>
               </div>
               <button onClick={() => setSvrOpen(false)} className="rounded p-1 text-slate-500 hover:bg-slate-100" aria-label="Close"><X className="h-5 w-5" /></button>
@@ -1566,7 +1520,7 @@ export function ReaderReportEditor(): JSX.Element {
               {svrQuery.isLoading ? (
                 <div className="flex items-center gap-2 py-6 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>
               ) : svrQuery.error ? (
-                <p className="py-6 text-sm text-red-600">Couldn’t load the Site-Visit Review.</p>
+                <p className="py-6 text-sm text-red-600">Couldn’t load the Non-compliant summary.</p>
               ) : (() => {
                 const total = svrQuery.data?.totalReaders || 1;
                 const list = (svrQuery.data?.standards || []).filter((s) => (svrFilter === 'all' ? true : s.verdict === svrFilter));

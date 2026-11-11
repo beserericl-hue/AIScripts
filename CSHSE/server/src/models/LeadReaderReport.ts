@@ -48,7 +48,8 @@ export interface ILeadReaderReport extends Document {
 
   // --- Recommendations (lead-reader decision) ---
   recommendation: LeadReaderRecommendation | '';
-  conditionalRequirements: string;    // shown when recommendation === 'conditional'
+  /** Legacy (conditional accreditation was removed Nov 2026); kept so old reports still load. */
+  conditionalRequirements: string;
   holdExplanation: string;            // shown when recommendation === 'hold'
   additionalRecommendations: string;  // not required by the Standards
   nextSelfStudySuggestions: string;

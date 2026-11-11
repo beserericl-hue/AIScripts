@@ -580,7 +580,8 @@ export const saveReaderReportData = async (req: AuthenticatedRequest, res: Respo
     void feedReaderReportCorrections(submissionId, priorMark, rows)
       .catch((e) => console.error('[CR-049] reader-report correction feed failed', e));
     const recommendation = typeof body.recommendation === 'string' ? body.recommendation : '';
-    const VOTES = ['accept', 'conditional', 'deny', 'hold', ''];
+    // 'conditional' was removed from the Council recommendation (Lauri, Nov 2026).
+    const VOTES = ['accept', 'deny', 'hold', ''];
 
     // Completion gate: when the reader marks the report COMPLETE it becomes
     // visible to the lead reader. `completed` is optional — when omitted the
@@ -841,7 +842,7 @@ export const listReaderReports = async (req: AuthenticatedRequest, res: Response
     });
 
     // The poll: tally completed readers' acceptance votes.
-    const tally = { accept: 0, conditional: 0, deny: 0, hold: 0 } as Record<string, number>;
+    const tally = { accept: 0, deny: 0, hold: 0 } as Record<string, number>;
     for (const it of items) {
       if (it.completedAt && it.acceptanceVote && tally[it.acceptanceVote] !== undefined) tally[it.acceptanceVote] += 1;
     }

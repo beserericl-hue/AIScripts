@@ -71,8 +71,7 @@ function emptyReport() {
     nonComplianceText: '',
     requiredCoursesOverride: '',
     secondSiteVisitorName: '',
-    recommendation: '' as '' | 'accredit_no_conditions' | 'conditional' | 'deny' | 'hold',
-    conditionalRequirements: '',
+    recommendation: '' as '' | 'accredit_no_conditions' | 'deny' | 'hold',
     holdExplanation: '',
     additionalRecommendations: '',
     nextSelfStudySuggestions: '',
@@ -286,15 +285,6 @@ async function buildDocx(system: SystemSections, report: ReportFields): Promise<
   children.push(new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: RECS_REF_LINE, italics: true, size: 18 })] }));
   const rec = report.recommendation;
   children.push(checkboxLine(rec === 'accredit_no_conditions', 'Accreditation with no conditions.'));
-  children.push(
-    checkboxLine(
-      rec === 'conditional',
-      'Conditional accreditation because the program had a few noncompliance issues that require correction.'
-    )
-  );
-  if (rec === 'conditional' && String(report.conditionalRequirements || '').trim()) {
-    children.push(...docxParagraphsFor(report.conditionalRequirements));
-  }
   children.push(checkboxLine(rec === 'deny', 'Deny accreditation due to significant noncompliance.'));
   children.push(checkboxLine(rec === 'hold', 'Hold a decision. Please explain.'));
   if (rec === 'hold' && String(report.holdExplanation || '').trim()) {
@@ -455,11 +445,6 @@ function buildPdf(system: SystemSections, report: ReportFields): Promise<Buffer>
     doc.font('Helvetica');
     const rec = report.recommendation;
     check(rec === 'accredit_no_conditions', 'Accreditation with no conditions.');
-    check(
-      rec === 'conditional',
-      'Conditional accreditation because the program had a few noncompliance issues that require correction.'
-    );
-    if (rec === 'conditional' && val(report.conditionalRequirements)) para(report.conditionalRequirements);
     check(rec === 'deny', 'Deny accreditation due to significant noncompliance.');
     check(rec === 'hold', 'Hold a decision. Please explain.');
     if (rec === 'hold' && val(report.holdExplanation)) para(report.holdExplanation);

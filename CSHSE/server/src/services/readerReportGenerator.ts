@@ -133,7 +133,6 @@ export interface ReaderReportExtras {
 }
 export const VOTE_OPTIONS: Array<[string, string]> = [
   ['accept', 'Accreditation with no conditions.'],
-  ['conditional', 'Conditional accreditation because the program had a few noncompliance issues that require correction.'],
   ['deny', 'Deny accreditation due to significant noncompliance.'],
   ['hold', 'Hold a decision.'],
 ];
@@ -359,7 +358,6 @@ async function buildTemplatedDocx(
 // form draws its boxes differently, so it relies on the recommendation block.
 const VOTE_BOX_LABEL: Record<string, string> = {
   accept: 'Accreditation with no conditions',
-  conditional: 'Conditional accreditation because',
   deny: 'Deny accreditation due',
   hold: 'Hold a decision',
 };
