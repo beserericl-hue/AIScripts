@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { scrollInPanel, resetHiddenFrames } from '../../../lib/scrollInPanel';
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -683,7 +684,8 @@ export function NarrativeEditor({
                       return t === label || t.startsWith(`${label} `);
                     });
                     if (head) {
-                      head.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                      scrollInPanel(head, { block: 'start' });
+                      resetHiddenFrames(head);
                       head.classList.add('bg-yellow-100');
                       window.setTimeout(() => head.classList.remove('bg-yellow-100'), 1800);
                     }
