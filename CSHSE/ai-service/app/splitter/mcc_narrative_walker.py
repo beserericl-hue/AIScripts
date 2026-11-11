@@ -77,36 +77,8 @@ SUPPORTING_LINK_RE = re.compile(
 APPENDIX_CODE_RE = re.compile(r"appendix\s*([A-Z]\d{1,2})\b", re.I)
 URL_RE = re.compile(r"https?://\S+")
 
-# ------------------------------------------------------------ matrix denoise
-# A curriculum matrix (Appendix A6) is a grid: spec rows × course columns, cells
-# rated X / H / M / L (with I/K/T/S sub-column headers). A linear PDF text
-# extractor flattens each row into "<spec label> <cell> <cell> …", so the cells
-# leak into the narrative ("Intake interviewing HHH HHMXHHH M M M …"). This run
-# is UNMISTAKABLE — 4+ consecutive UPPERCASE tokens drawn only from the coverage
-# alphabet {X,H,M,L,I,K,T,S}. Real prose never produces that (it would need 4+
-# consecutive all-caps words made only of those letters). Case-sensitive so
-# lowercase words like "it is this list" can never match.
-_MATRIX_CELL_RUN = re.compile(r"(?:\b[XHMLIKTS]{1,8}\b[ \t.,]*){4,}")
-
-
-def denoise_matrix_cells(text: str) -> str:
-    """Strip flattened curriculum-matrix cell runs out of narrative text. Text
-    with no cell run is returned UNCHANGED (we never touch clean prose)."""
-    if not text or not _MATRIX_CELL_RUN.search(text):
-        return text
-    cleaned = _MATRIX_CELL_RUN.sub(" ", text)
-    return re.sub(r"[ \t]{2,}", " ", cleaned).strip()
-
-
-def is_matrix_row(text: str) -> bool:
-    """True when a chunk is essentially a matrix ROW — i.e. once the cell runs
-    are stripped, little real prose remains (a 1–4 word topic label like
-    "Intake interviewing"). Real narratives survive denoising with many words."""
-    if not text or not _MATRIX_CELL_RUN.search(text):
-        return False
-    stripped = denoise_matrix_cells(text)
-    words = re.findall(r"[A-Za-z]{3,}", stripped)
-    return len(words) < 5
+# Curriculum-matrix exclusion (the matrix is not part of the self-study).
+from app.splitter.curriculum_matrix_exclusion import is_curriculum_matrix_title  # noqa: E402
 
 # Numbered intro sub-section header ("1. MCC Associate of Applied Science").
 # Anchored + Title-Case to avoid matching prose like "2024. Average GPA…".
@@ -136,7 +108,7 @@ class MccAppendixEntry:
     sub_documents: list[str] = field(default_factory=list)
     page_start: Optional[int] = None   # 0-based pypdf page index of cover header
     page_end: Optional[int] = None     # exclusive; = next appendix's page_start
-    kind: str = "other"                # matrix|cv|syllabus|outline|assignment|handbook|minutes|other
+    kind: str = "other"                # cv|syllabus|outline|assignment|handbook|minutes|other
 
     def to_dict(self) -> dict:
         return {
@@ -557,10 +529,10 @@ def walk_mcc_pdf(pdf_path: str, expected_standards: int = 20) -> MccParseResult:
 
     # ---- Clamp the LAST standard so it doesn't swallow the appendix section ----
     # build_skeleton runs the final "Standard #N" block to EOF (no next marker),
-    # which pulls in the appendix index + the Appendix A6 curriculum matrix pages.
-    # Those matrix rows ("a. Intake interviewing HHH HHMX…") then get letter-split
-    # into that standard's specs — the garbage cards. Re-bound the last standard to
-    # end at the first appendix content page so the matrix never enters a narrative.
+    # which pulls in the appendix index + appendix pages (including any
+    # curriculum-matrix grid, whose flattened rows would get letter-split into
+    # that standard's specs). Re-bound the last standard to end at the first
+    # appendix content page so appendix content never enters a narrative.
     app_starts = [e.page_start for e in result.appendix_catalog if e.page_start is not None]
     if app_starts and result.standards:
         body_end = min(app_starts)  # 0-based; body is [.. body_end)
@@ -576,9 +548,27 @@ def walk_mcc_pdf(pdf_path: str, expected_standards: int = 20) -> MccParseResult:
             last.references = parse_references(last.text)
             result.warnings.append(
                 f"Clamped Standard #{last.n} to end before the appendix section "
-                f"(page {body_end}) so the curriculum matrix isn't read as narrative."
+                f"(page {body_end}) so appendix content isn't read as narrative."
             )
+    _drop_curriculum_matrix_appendices(result)
     return result
+
+
+def _drop_curriculum_matrix_appendices(result: MccParseResult) -> None:
+    """Exclusion only: remove every curriculum-matrix appendix from the catalog
+    and every narrative reference to it. Runs AFTER page location + the clamp
+    (the matrix's page_start still bounds its neighbours), so the matrix pages
+    are never sliced, filed, linked to a spec or indexed."""
+    excluded = {e.code for e in result.appendix_catalog if is_curriculum_matrix_title(e.title)}
+    if not excluded:
+        return
+    result.appendix_catalog = [e for e in result.appendix_catalog if e.code not in excluded]
+    result.intro_references = [r for r in result.intro_references if r.code not in excluded]
+    for std in result.standards:
+        std.references = [r for r in std.references if r.code not in excluded]
+    result.warnings.append(
+        f"Excluded curriculum-matrix appendix {sorted(excluded)} — the matrix is not part of the self-study."
+    )
 
 
 def extract_uri_links(reader, page_start: int, page_end: int) -> list[str]:

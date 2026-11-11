@@ -124,7 +124,7 @@ def _build_prompt(
         "enumerated sub-item when the narrative + evidence reasonably cover the intent (e.g. "
         "'faculty make all curriculum decisions' covers setting policy, content, implementation "
         "and evaluation).\n"
-        "3. Documents/matrices/forms: when the criterion asks that a document, matrix, or form be "
+        "3. Documents/tables/forms: when the criterion asks that a document, table, or form be "
         "PROVIDED, its EXISTENCE in the file library satisfies it — do not fail because a table's "
         "exact cell contents can't be read from the extracted text.\n\n"
         "Reply with STRICT JSON only:\n"

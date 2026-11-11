@@ -30,7 +30,6 @@ def _type_label(t: str) -> str:
     return {
         "narrative_response": "narrative",
         "supporting_evidence": "supporting evidence",
-        "curriculum_matrix": "curriculum matrix",
         "context": "context",
         "unknown": "unknown",
     }.get(t, t)

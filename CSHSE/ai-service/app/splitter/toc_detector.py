@@ -436,7 +436,7 @@ def _iter_following_block_tags(start_tag):
     """Yield following top-level block tags (``<p>``, ``<h1>``..``<h6>``,
     ``<li>``) in document order, starting after ``start_tag``.
 
-    Skips tags nested inside a ``<table>`` (matrix territory) and
+    Skips tags nested inside a ``<table>`` (data-table territory) and
     skips repeated containers — we want one tag per visible TOC line.
     """
     seen = set()

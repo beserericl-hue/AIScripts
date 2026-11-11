@@ -364,7 +364,7 @@ def main():
     out("")
     out("## Section-type distribution")
     out("")
-    for k in ["narrative_response", "supporting_evidence", "curriculum_matrix", "context", "unknown"]:
+    for k in ["narrative_response", "supporting_evidence", "context", "unknown"]:
         out(f"- **{k}**: {by_type.get(k, 0)}")
     out("")
     out("## Accept-state distribution")
@@ -417,7 +417,7 @@ def main():
     print("=" * 60)
     print(f"📊 SUMMARY ({len(results)} sections)")
     print(f"   Section type:")
-    for k in ["narrative_response", "supporting_evidence", "curriculum_matrix", "context", "unknown"]:
+    for k in ["narrative_response", "supporting_evidence", "context", "unknown"]:
         print(f"     {k:25s} {by_type.get(k, 0)}")
     print(f"   Accept state:")
     for k in ["auto_accept", "review_letter_disagrees", "review_low_confidence", "review_unknown"]:

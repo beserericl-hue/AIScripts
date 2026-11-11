@@ -159,41 +159,6 @@ class CoverageReviewRequest(BaseModel):
     submissionId: str = "" 
 
 
-class MatrixInferColumnsRequest(BaseModel):
-    """CR-025 — coordinator-facing column inference for the wizard's matrix step."""
-    matrixSlug: str
-    institutionId: str | None = None
-    programLevel: str = "bachelors"
-    rawTableHtml: str = ""
-    columnCount: int
-    surroundingContext: str = ""
-    knownCourses: list[str] | None = None
-
-
-class MatrixConfirmColumnRequest(BaseModel):
-    """CR-025 — one row of confirmed column → course mapping."""
-    institutionId: str
-    programLevel: str = "bachelors"
-    matrixSlug: str
-    columnIndex: int
-    course: str
-    priorConfidence: float = 1.0
-
-
-class MatrixInferRowSpecRequest(BaseModel):
-    """CR-030 — infer the subspec for a matrix row when standard is known.
-
-    The wizard's matrix step shows "Spec 12.?" when the extractor matched
-    the row's standard via template heuristics but couldn't pin the
-    subspec letter. This endpoint asks Haiku which subspec from the
-    Handbook best matches the row's prompt.
-    """
-    rowPrompt: str
-    standardCode: str
-    programLevel: str = "bachelors"
-    surroundingContext: str = ""
-
-
 @app.post("/ai/import/start", status_code=status.HTTP_202_ACCEPTED)
 async def start_import(req: StartImportRequest, request: Request) -> dict:
     """Accept an import job from the CSHSE server and enqueue it.
@@ -227,7 +192,7 @@ class RedetectRequest(BaseModel):
     """CR-040 follow-on — re-run the standalone-evidence detectors
     (cv_detector, appendix_paper_detector, introduction_detector)
     against an already-uploaded .docx without re-triggering the
-    matcher / matrix extraction.
+    matcher.
 
     Used by the wizard's Re-detect button on the Review surface: a
     coordinator who already worked through Review on an import that
@@ -246,7 +211,7 @@ async def redetect(req: RedetectRequest, request: Request) -> dict:
     """Synchronous re-detect — pulls the .docx from S3, runs walker +
     standalone detectors only, returns {cvs, evidenceDocs, introductionHints}.
 
-    No matcher, no matrix extractor, no callback. The caller (cshse-server)
+    No matcher, no callback. The caller (cshse-server)
     persists the result to SelfStudyImport.aiCVs / aiEvidenceDocs /
     aiIntroductionHints and triggers the CR-043 aiReviewMerge.
 
@@ -800,116 +765,6 @@ async def coverage_review_endpoint(req: CoverageReviewRequest, request: Request)
         return {"results": [], "error": f"{type(exc).__name__}: {exc}"}
 
 
-@app.post("/ai/matrix/infer-columns", status_code=status.HTTP_200_OK)
-async def infer_matrix_columns_endpoint(req: MatrixInferColumnsRequest, request: Request) -> dict:
-    """CR-025 — infer column → course mappings for one curriculum matrix.
-
-    Server posts this for each matrix on the wizard's Matrix step. We
-    read the raw `<table>` HTML (which still carries merged-cell course
-    headers in the bytes even if mammoth's DOM walker missed them),
-    consult the per-institution `cshse_matrix_columns_{env}` Qdrant
-    collection for prior confirmations, and ask Haiku for confidence-
-    ranked suggestions.
-
-    Returns suggestions for every column from 0..columnCount-1, padded
-    with "no signal" entries for columns the model couldn't guess.
-    """
-    body = await request.body()
-    verify_hmac_signature(request, body)
-    from app.matrix.column_inference import infer_columns
-    from app.vector.qdrant_ops import VectorStore
-    from app.embeddings.openai_client import EmbeddingClient
-    from app.config import get_settings as _gs
-
-    settings = _gs()
-    try:
-        result = infer_columns(
-            matrix_slug=req.matrixSlug,
-            raw_table_html=req.rawTableHtml,
-            column_count=req.columnCount,
-            institution_id=req.institutionId,
-            program_level=req.programLevel,
-            surrounding_context=req.surroundingContext,
-            known_courses=req.knownCourses or [],
-            embedder=EmbeddingClient(settings.openai_api_key) if settings.openai_api_key else None,
-            store=VectorStore(settings.qdrant_url, settings.qdrant_api_key or None) if settings.qdrant_url else None,
-            settings=settings,
-        )
-        return result.to_dict()
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=502,
-            detail=f"matrix column inference failed: {type(exc).__name__}: {exc}",
-        )
-
-
-@app.post("/ai/matrix/confirm-column", status_code=status.HTTP_201_CREATED)
-async def confirm_matrix_column_endpoint(req: MatrixConfirmColumnRequest, request: Request) -> dict:
-    """CR-025 — persist a coordinator-confirmed column → course mapping.
-
-    Called when the coordinator clicks "Accept" on an AI suggestion or
-    types in their own override. Idempotent: keyed by
-    (institution, matrix_slug, column_index). Subsequent imports for
-    this institution surface this mapping as a RAG hint to the matcher.
-    """
-    body = await request.body()
-    verify_hmac_signature(request, body)
-    from app.matrix.column_inference import record_confirmed_mapping
-    from app.vector.qdrant_ops import VectorStore
-    from app.embeddings.openai_client import EmbeddingClient
-    from app.config import get_settings as _gs
-
-    settings = _gs()
-    try:
-        return record_confirmed_mapping(
-            institution_id=req.institutionId,
-            program_level=req.programLevel,
-            matrix_slug=req.matrixSlug,
-            column_index=req.columnIndex,
-            course=req.course,
-            prior_confidence=req.priorConfidence,
-            embedder=EmbeddingClient(settings.openai_api_key) if settings.openai_api_key else None,
-            store=VectorStore(settings.qdrant_url, settings.qdrant_api_key or None) if settings.qdrant_url else None,
-            settings=settings,
-        )
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=502,
-            detail=f"matrix column confirm failed: {type(exc).__name__}: {exc}",
-        )
-
-
-@app.post("/ai/matrix/infer-row-spec", status_code=status.HTTP_200_OK)
-async def infer_matrix_row_spec_endpoint(req: MatrixInferRowSpecRequest, request: Request) -> dict:
-    """CR-030 — given a row's prompt + known standard, pick the best subspec.
-
-    The wizard's matrix step shows '?' for rows whose subspec couldn't be
-    inferred from the template prompts. This endpoint reads the Handbook
-    spec list for the standard, asks Haiku which subspec best matches,
-    and returns a suggestion. The client uses the existing retagMatrixRow
-    store action to apply the user's confirmed choice.
-
-    Soft-fails to suggestedSpec=null + confidence=0 if Anthropic is
-    unavailable; the client falls back to manual entry.
-    """
-    body = await request.body()
-    verify_hmac_signature(request, body)
-    from app.matrix.row_spec_inference import infer_row_spec
-    try:
-        result = infer_row_spec(
-            row_prompt=req.rowPrompt,
-            standard_code=req.standardCode,
-            program_level=req.programLevel,
-            surrounding_context=req.surroundingContext,
-        )
-        return result.to_dict()
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=502,
-            detail=f"matrix row spec inference failed: {type(exc).__name__}: {exc}",
-        )
-
-
 @app.post("/ai/import/{job_id}/cancel")
 async def cancel_import(job_id: str, request: Request) -> dict:
     """Cancel a queued or running job. Idempotent."""
@@ -997,7 +852,6 @@ class EvidenceScoreRequest(BaseModel):
     standardCode: str
     specCode: str
     candidateChunks: list[dict]
-    matrixRows: list[dict] | None = Field(default=None, description="CR-024 Sprint 4 — matrix rows for the spec, included in the Haiku prompt.")
 
 
 class SectionEvaluateRequest(BaseModel):
@@ -1023,42 +877,6 @@ class XrefPlacementRequest(BaseModel):
     specs: list[dict] = Field(description="[{std, spec, prompt}] for the program level.")
     narratives: list[dict] = Field(description="[{std, spec, text}] — the imported self-study narratives.")
     files: list[dict] = Field(description="[{id, name, path, text}] — up to 25 files.")
-
-
-class MatrixExtractRequest(BaseModel):
-    """A curriculum matrix uploaded ON ITS OWN (importer kind "Curriculum
-    matrix"): extract only the matrix — no section parsing, no drafts."""
-    base64: str = Field(..., description="The .docx bytes, base64.")
-    filename: str = Field(default="")
-    programLevel: str = Field(default="bachelors")
-
-
-@app.post("/ai/matrix/extract", status_code=status.HTTP_200_OK)
-async def matrix_extract(req: MatrixExtractRequest, request: Request) -> dict:
-    body = await request.body()
-    verify_hmac_signature(request, body)
-    import base64 as _b64
-    import io as _io
-
-    import mammoth as _mammoth
-    from starlette.concurrency import run_in_threadpool
-
-    from app.matrix.template_loader import align_template_to_handbook, load_matrix_template
-    from app.matrix.wire_format import build_wire_matrices
-    from app.standards.loader import load_specifications
-
-    level = {"baccalaureate": "bachelors", "bachelor": "bachelors", "master": "masters"}.get(req.programLevel, req.programLevel)
-    try:
-        data = _b64.b64decode(req.base64)
-        html = _mammoth.convert_to_html(_io.BytesIO(data)).value.encode("utf-8")
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=422, detail=f"Could not read the document as Word (.docx): {type(exc).__name__}")
-    try:
-        aligned = align_template_to_handbook(load_matrix_template(level), load_specifications(level))
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=422, detail=f"No matrix template for level {level}: {exc}")
-    matrices, _ = await run_in_threadpool(build_wire_matrices, html, aligned)
-    return {"matrices": matrices, "level": level}
 
 
 @app.post("/ai/placement/xref", status_code=status.HTTP_200_OK)
@@ -1227,7 +1045,6 @@ async def evidence_score(req: EvidenceScoreRequest, request: Request) -> dict:
             standard_code=req.standardCode,
             spec_code=req.specCode,
             candidate_chunks=req.candidateChunks,
-            matrix_rows=req.matrixRows,
         )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(

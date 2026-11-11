@@ -136,10 +136,8 @@ BACCALAUREATE_SAMPLE: list[Specification] = [
         spec_code="a",
         standard_title="Curriculum",
         spec_text=(
-            "Provide a curriculum matrix demonstrating how each Specification "
-            "in Standard 11 is addressed by required courses, with course "
-            "numbers, content type (Introduce / Teach / Knowledge / Skill), "
-            "and depth (Low / Medium / High)."
+            "The historical roots of human services as a discipline and a "
+            "profession."
         ),
         program_level="bachelors",
     ),
