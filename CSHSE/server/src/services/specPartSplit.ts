@@ -158,6 +158,12 @@ export function splitHtmlIntoParts(html: string, std: string, spec: string, part
     if (t) cur.text.push(t);
   }
   if (!found) return null;
+  // The parts restated as a list ("1. Observation to / 2. Directly supervised …
+  // to / 3. … / 4. …") followed by ONE combined answer is the prompt, not
+  // per-part answers: most headings then have no text of their own. Keep the
+  // narrative whole for the spec rather than file it all under the last part.
+  const emptyParts = chunks.filter((c) => c.n > 0 && !c.text.join(' ').trim() && !/<(img|table)/i.test(c.html.join(''))).length;
+  if (emptyParts >= 2 && emptyParts * 2 >= found) return null;
   return chunks
     .map((c) => ({ n: c.n, html: c.html.join(''), text: c.text.join('\n\n') }))
     .filter((c) => c.n > 0 || /\w/.test(c.text.replace(/^provide the following:?$/i, '')));

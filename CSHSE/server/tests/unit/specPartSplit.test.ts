@@ -72,6 +72,18 @@ describe('splitBucketsIntoParts', () => {
     );
     expect(r.changed).toBe(false);
   });
+  it('NEGATIVE: parts restated as a list, then one combined answer (ETSU 21.h) stay one narrative', () => {
+    const html =
+      '<p>1.  Observation to</p><p>2.  Directly supervised client contacts to</p><p>3.  Indirectly supervised client contacts to</p>' +
+      '<p>4.  An independent caseload OR assignment of administrative responsibility.</p><p>The program follows a developmental model …</p>';
+    const r = splitBucketsIntoParts({ '21.h': bucket('21', 'h', html) }, 'baccalaureate');
+    expect(r.changed).toBe(false);
+  });
+  it('one part left unanswered still splits the others', () => {
+    const html = '<p>1. A history of program evaluations</p><p>Every 5 years.</p><p>4.b. 2. A description of the methodology</p><p>4.b. 3. A summative analysis of the most recent evaluation</p><p>Retention rose.</p>';
+    const r = splitBucketsIntoParts({ '4.b': bucket('4', 'b', html) }, 'baccalaureate');
+    expect(r.buckets['4.b'].narratives.map((x: any) => x.partN)).toEqual([1, 2, 3]);
+  });
   it('keeps text before the first part heading as the spec intro (not "Provide the following:")', () => {
     const html = '<p>Provide the following:</p><p>1. A history of program evaluations</p><p>Every 5 years.</p>';
     const r = splitBucketsIntoParts({ '4.b': bucket('4', 'b', html) }, 'baccalaureate');

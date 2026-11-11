@@ -1666,11 +1666,24 @@ export async function applyReviewState(
     const b: any = bucket;
     const std = b.standardCode;
     const spec = b.specCode;
-    for (const item of (b.narratives || [])) {
-      if (!approvedSet.has(item.sectionId)) continue;
+    // Every approved narrative of the spec (one per numbered part after the
+    // part split) — previously each overwrote the last, keeping only one.
+    const approvedNarr = (b.narratives || []).filter((item: any) => approvedSet.has(item.sectionId));
+    if (approvedNarr.length) {
       payload.narratives[std] = payload.narratives[std] || {};
       payload.narratives[std][spec] = {
-        content: item.snippet || '',
+        content:
+          approvedNarr.length === 1 && !approvedNarr[0].partN
+            ? approvedNarr[0].snippet || ''
+            : composeSpecNarrativeHtml(
+                approvedNarr.map((item: any) => ({
+                  html: item.htmlSnippet || `<p>${escapeHtml(item.snippet || '')}</p>`,
+                  partN: typeof item.partN === 'number' ? item.partN : undefined,
+                  partText: item.partText,
+                })),
+                String(std),
+                String(spec)
+              ),
         mode: 'merge'
       };
     }
