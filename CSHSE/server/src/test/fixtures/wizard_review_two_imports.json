@@ -39,7 +39,6 @@
         ],
         "evidenceText": [],
         "evidenceFiles": [],
-        "matrixCells": [],
         "coverageScore": 0.9,
         "coverageCovered": true,
         "coverageGaps": [],
@@ -64,7 +63,6 @@
         ],
         "evidenceText": [],
         "evidenceFiles": [],
-        "matrixCells": [],
         "coverageScore": 0.85,
         "coverageCovered": true,
         "coverageGaps": [],
@@ -73,7 +71,6 @@
     },
     "aiTags": [],
     "aiPlaceholderSections": [],
-    "aiMatrices": [],
     "aiStages": [
       { "name": "matcher", "state": "done" }
     ]
@@ -115,7 +112,6 @@
         ],
         "evidenceText": [],
         "evidenceFiles": [],
-        "matrixCells": [],
         "coverageScore": 0.9,
         "coverageCovered": true,
         "coverageGaps": [],
@@ -142,7 +138,6 @@
         ],
         "evidenceText": [],
         "evidenceFiles": [],
-        "matrixCells": [],
         "coverageScore": 0.85,
         "coverageCovered": true,
         "coverageGaps": [],

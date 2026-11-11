@@ -9,8 +9,6 @@
  *   - POST   /api/submissions/:id/review/discard        — discardItem
  *   - POST   /api/submissions/:id/review/clear-item     — clearItem
  *   - POST   /api/submissions/:id/review/apply          — applyReviewState
- *   - GET    /api/submissions/:id/matrix-state          — getMatrixState
- *   - POST   /api/submissions/:id/matrix-state          — setMatrixRowEdit
  *   - AC#10  cross-PC isolation (depends on _loadOwnedSubmission fix)
  */
 
@@ -30,7 +28,6 @@ interface SubmissionOverrides {
   institutionId?: mongoose.Types.ObjectId;
   status?: string;
   aiReviewState?: any;
-  aiMatrixState?: any;
 }
 
 async function seedSubmission(overrides: SubmissionOverrides = {}) {
@@ -45,7 +42,6 @@ async function seedSubmission(overrides: SubmissionOverrides = {}) {
     type: 'initial',
     status: overrides.status ?? 'draft',
     aiReviewState: overrides.aiReviewState,
-    aiMatrixState: overrides.aiMatrixState,
   });
   return doc;
 }
@@ -61,7 +57,6 @@ function makeReviewState(overrides: any = {}) {
         narratives: [{ sectionId: 'sec-1', heading: 'h', snippet: 'approved snippet', wordCount: 2, confidence: 0.9, sourceImportId: 'imp-A', sourceFilename: 'file-A.docx' }],
         evidenceText: [],
         evidenceFiles: [],
-        matrixCells: [],
       },
     },
     tags: overrides.tags ?? [],
@@ -126,23 +121,15 @@ describe('GET /api/submissions/:id/review', () => {
     expect(res.body.aiReviewState).toBeNull();
   });
 
-  it('returns aiMatrixState alongside aiReviewState', async () => {
+  it('NEGATIVE: never returns an aiMatrixState (the curriculum matrix was removed)', async () => {
     const { user } = await createUser({ role: 'program_coordinator' });
-    const sub = await seedSubmission({
-      submitterId: user._id as any,
-      aiMatrixState: {
-        matrices: [{ slug: 'm1' }],
-        matrixRowEdits: {},
-        lastUpdatedAt: new Date(),
-      },
-    });
+    const sub = await seedSubmission({ submitterId: user._id as any });
     const token = signTokenFor(user as any);
     const res = await request(app)
       .get(`/api/submissions/${sub._id}/review`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body.aiMatrixState).toBeDefined();
-    expect(res.body.aiMatrixState.matrices[0].slug).toBe('m1');
+    expect('aiMatrixState' in res.body).toBe(false);
   });
 });
 
@@ -422,7 +409,6 @@ describe('POST /api/submissions/:id/review/apply', () => {
           ],
           evidenceText: [],
           evidenceFiles: [],
-          matrixCells: [],
         },
       },
       approvedIds: ['sec-1'],
@@ -475,7 +461,6 @@ describe('POST /api/submissions/:id/review/apply', () => {
           narratives: [],
           evidenceText: [],
           evidenceFiles: [{ sectionId: 'ef-1', heading: 'doc-1' }],
-          matrixCells: [],
         },
       },
       approvedIds: ['ef-1'],
@@ -555,77 +540,6 @@ describe('POST /api/submissions/:id/review/apply', () => {
     expect(res.status).toBe(200);
     const reloaded: any = await Submission.findById(sub._id);
     expect(reloaded.aiReviewState.evidenceDocs).toEqual([]);
-  });
-});
-
-// --- matrix-state --------------------------------------------------------
-
-describe('matrix-state routes', () => {
-  it('AC#9: GET returns persisted aiMatrixState', async () => {
-    const { user } = await createUser({ role: 'program_coordinator' });
-    const sub = await seedSubmission({
-      submitterId: user._id as any,
-      aiMatrixState: {
-        matrices: [{ slug: 'curr-mat-1', rows: [] }],
-        matrixRowEdits: { 'curr-mat-1|row-1': { note: 'edited' } },
-        lastUpdatedAt: new Date(),
-      },
-    });
-    const token = signTokenFor(user as any);
-    const res = await request(app)
-      .get(`/api/submissions/${sub._id}/matrix-state`)
-      .set('Authorization', `Bearer ${token}`);
-    expect(res.status).toBe(200);
-    expect(res.body.aiMatrixState.matrices[0].slug).toBe('curr-mat-1');
-    expect(res.body.aiMatrixState.matrixRowEdits['curr-mat-1|row-1']).toEqual({ note: 'edited' });
-  });
-
-  it('AC#9: POST with edit persists the row edit', async () => {
-    const { user } = await createUser({ role: 'program_coordinator' });
-    const sub = await seedSubmission({ submitterId: user._id as any });
-    const token = signTokenFor(user as any);
-    const res = await request(app)
-      .post(`/api/submissions/${sub._id}/matrix-state`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({ matrixSlug: 'm1', rowAnchor: 'row-a', edit: { note: 'new' } });
-    expect(res.status).toBe(200);
-    const reloaded: any = await Submission.findById(sub._id);
-    expect(reloaded.aiMatrixState.matrixRowEdits['m1|row-a']).toEqual({ note: 'new' });
-  });
-
-  it('AC#9: POST with edit=null removes the row edit', async () => {
-    const { user } = await createUser({ role: 'program_coordinator' });
-    const sub = await seedSubmission({
-      submitterId: user._id as any,
-      aiMatrixState: {
-        matrices: [],
-        matrixRowEdits: {
-          'm1|row-a': { note: 'will be removed' },
-          'm1|row-b': { note: 'stays' },
-        },
-        lastUpdatedAt: new Date(),
-      },
-    });
-    const token = signTokenFor(user as any);
-    const res = await request(app)
-      .post(`/api/submissions/${sub._id}/matrix-state`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({ matrixSlug: 'm1', rowAnchor: 'row-a', edit: null });
-    expect(res.status).toBe(200);
-    const reloaded: any = await Submission.findById(sub._id);
-    expect(reloaded.aiMatrixState.matrixRowEdits?.['m1|row-a']).toBeUndefined();
-    expect(reloaded.aiMatrixState.matrixRowEdits?.['m1|row-b']).toEqual({ note: 'stays' });
-  });
-
-  it('returns 400 without matrixSlug+rowAnchor', async () => {
-    const { user } = await createUser({ role: 'program_coordinator' });
-    const sub = await seedSubmission({ submitterId: user._id as any });
-    const token = signTokenFor(user as any);
-    const res = await request(app)
-      .post(`/api/submissions/${sub._id}/matrix-state`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({ edit: { note: 'new' } });
-    expect(res.status).toBe(400);
   });
 });
 
@@ -732,7 +646,6 @@ describe('POST /api/submissions/:id/review/finish', () => {
           ],
           evidenceText: [],
           evidenceFiles: [],
-          matrixCells: [],
         },
       },
       tags: [],

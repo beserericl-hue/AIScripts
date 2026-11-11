@@ -227,7 +227,7 @@ describe("Master's form", () => {
     const reader = (await createUser({ role: 'reader', firstName: 'Ma', lastName: 'Reader' })).user;
     await assignToSubmission(sub, reader, 'reader');
     await ReaderReport.create({
-      submissionId: sub._id, reviewerId: reader._id, acceptanceVote: 'conditional',
+      submissionId: sub._id, reviewerId: reader._id, acceptanceVote: 'deny',
       rows: [{ standardCode: '12', specCode: 'b', mark: 'noncompliant', comment: 'MASTERS-12b gap' }],
     } as any);
     const res = await binary(request(app)
@@ -240,7 +240,9 @@ describe("Master's form", () => {
     expect(r12b.filter((c) => c === '☒')).toHaveLength(1);
     const text = await docxText(res.body);
     expect(text).toContain('Ma Reader');
-    expect(text).toContain('☒ Conditional accreditation');
+    // The Conditional option was removed (Lauri, Nov 2026).
+    expect(text).toContain('☒ Deny accreditation');
+    expect(text).not.toContain('Conditional accreditation');
     expect(text).not.toMatch(/\{\{[a-z_0-9]+\}\}/);
   });
 });
@@ -339,7 +341,7 @@ describe('Lead Reader Report non-compliance section', () => {
     const docx = await binary(request(app).get(`/api/submissions/${sub._id}/lead-reader-report/download?format=docx`).set('Authorization', `Bearer ${signTokenFor(lead)}`));
     const xml = await (await JSZip.loadAsync(docx.body)).file('word/document.xml')!.async('string');
     const runs = boxRuns(xml);
-    expect(runs.length).toBeGreaterThanOrEqual(11);
+    expect(runs.length).toBeGreaterThanOrEqual(10); // one fewer since the Conditional option was removed
     for (const r of runs) expect(r).toContain('w:ascii="MS Gothic"');
     for (const label of ['Reaccreditation', 'Associate', 'Accreditation with no conditions.']) {
       const p = paragraphWith(xml, ` ${label}`);

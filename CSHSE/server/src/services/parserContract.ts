@@ -46,7 +46,6 @@ export interface ContractResult {
     evidenceText: number;
     cvs: number;
     evidenceDocs: number;
-    matrices: number;
     docSubKinds: Record<string, number>; // paper/syllabus/etc. across evidenceDocs
   };
   loss: {
@@ -166,7 +165,7 @@ export async function checkParserContract(importId: string): Promise<ContractRes
     format: String(imp.aiFormat?.format || (typeof imp.aiFormat === 'string' ? imp.aiFormat : '') || ''),
     anchors: { ok: anchorsOk, totalItems: items.length, anchored: items.length - missing.length, missing },
     coverage: { specsWithContent, byStandard, unplacedTags, catalogSpecs },
-    fileTypes: { evidenceFiles: evFiles, evidenceText: evText, cvs: (rs.cvs || []).length, evidenceDocs: evidenceDocs.length, matrices: (rs.matrices || []).length, docSubKinds },
+    fileTypes: { evidenceFiles: evFiles, evidenceText: evText, cvs: (rs.cvs || []).length, evidenceDocs: evidenceDocs.length, docSubKinds },
     loss: { perSpecChars },
     findings,
   };

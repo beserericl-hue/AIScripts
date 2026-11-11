@@ -159,8 +159,7 @@ export function mergeImportIntoReviewState(
     cvs: { kept: 0, replaced: 0, added: 0 },
     evidenceDocs: { kept: 0, replaced: 0, added: 0 },
     introductions: { kept: 0, replaced: 0, added: 0 },
-    placeholders: { kept: 0, replaced: 0, added: 0 },
-    matrices: { kept: 0, replaced: 0, added: 0 }
+    placeholders: { kept: 0, replaced: 0, added: 0 }
   };
 
   // REQUIREMENT (user): reading in a document REPLACES the previously-read
@@ -470,8 +469,7 @@ export async function clearPreCR043State(
       aiEvidenceDocs: 1,
       aiIntroductions: 1,
       aiIntroductionHints: 1,
-      aiPlaceholderSections: 1,
-      aiMatrices: 1
+      aiPlaceholderSections: 1
     }
   });
   return result.modifiedCount ?? 0;

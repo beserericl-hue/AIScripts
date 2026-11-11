@@ -5,9 +5,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { SelfStudyImport, ISelfStudyImport, IDetectedSection } from '../models/SelfStudyImport';
 import { Submission } from '../models/Submission';
 import { Institution } from '../models/Institution';
+import { isCurriculumMatrixFileName } from '../services/curriculumMatrixExclusion';
+import { storeExcludedCurriculumMatrixFile } from '../services/curriculumMatrixStore';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { WebhookSettings } from '../models/WebhookSettings';
-import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { documentParserService, TOCBasedSection, ParsedDocument } from '../services/documentParser';
 import { sectionMapperService } from '../services/sectionMapper';
 import { saveWithRetry, withRetry } from '../utils/dbRetry';
@@ -18,7 +19,6 @@ import { DocumentVersion } from '../models/DocumentVersion';
 import { recordVersion } from '../services/documentVersionService';
 import { requireImportAccess, requireSubmissionAccess, requireCanImport } from '../services/submissionAccessGuard';
 import { signFileAccessToken } from '../services/fileAccessToken';
-import { extractMatrix } from '../services/cshseAiClient';
 import { AuthenticatedRequest } from '../middleware/auth';
 import fs from 'fs/promises';
 import { createReadStream } from 'fs';
@@ -45,7 +45,6 @@ function flattenString(s: string): string {
 function createPlaceholderHtml(sectionId: string, sectionType: string, title: string, contentLength: number): string {
   const typeColors: Record<string, { bg: string; border: string; text: string }> = {
     'standard': { bg: '#ccfbf1', border: '#2dd4bf', text: '#115e59' },
-    'matrix': { bg: '#f3e8ff', border: '#a855f7', text: '#6b21a8' },
     'appendix': { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' },
     'skip': { bg: '#f3f4f6', border: '#9ca3af', text: '#4b5563' }
   };
@@ -207,10 +206,26 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
       return res.status(404).json({ error: 'Submission not found' });
     }
 
+    // The importer's document kinds: '' (a self-study, parsed) or a direct-store
+    // kind. The "Curriculum matrix" kind was removed with the matrix itself (CSHSE
+    // board, Nov 2026) — reject it (and any other unknown kind) up front.
+    const requestedKind =
+      typeof req.body.documentKind === 'string' ? req.body.documentKind.trim().toLowerCase() : '';
+    if (requestedKind && !['self_study', 'self-study', 'cv', 'syllabus', 'project'].includes(requestedKind)) {
+      return res.status(400).json({ error: `Unsupported document kind "${requestedKind}".` });
+    }
+
     // Determine file type
     const extension = file.originalname.toLowerCase().split('.').pop();
     if (!['pdf', 'docx', 'pptx'].includes(extension || '')) {
       return res.status(400).json({ error: 'Unsupported file type. Please upload PDF, DOCX, or PPTX.' });
+    }
+
+    // A curriculum matrix is not part of the self-study (CSHSE board, Nov 2026):
+    // never parse it. Keep the file in the File Library, tagged as excluded and
+    // assigned to no Standard (the SupportingEvidence pre-save hook does that).
+    if (isCurriculumMatrixFileName(file.originalname)) {
+      return res.status(201).json(await storeExcludedCurriculumMatrixFile({ submission, file, userId: req.user?.id }));
     }
 
     // Create import record
@@ -277,14 +292,6 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
       typeof req.body.documentKind === 'string'
         ? req.body.documentKind.trim().toLowerCase()
         : '';
-    // "Curriculum matrix": the file IS the program's curriculum matrix (the
-    // official "Matrix Illustrating Relationship of Required Courses to
-    // Curriculum Standards" form, uploaded on its own). File it under 2.e and
-    // load its rows into the Curriculum Matrix — nothing else is parsed, so it
-    // never turns into draft narratives.
-    if (rawKind === 'matrix') {
-      return loadStandaloneMatrix(req, res, submission, importRecord, file);
-    }
     const DIRECT_KINDS = ['cv', 'syllabus', 'project'];
     if (DIRECT_KINDS.includes(rawKind)) {
       try {
@@ -436,18 +443,6 @@ async function processDocumentAsync(
       }, {} as Record<string, number>)
     });
 
-    // Log matrix entries specifically for debugging
-    const matrixTocEntries = tocEntries.filter(e => e.isMatrix || e.title.toLowerCase().includes('matrix'));
-    const matrixSections = tocSections.filter(s => s.tocEntry.isMatrix || s.tocEntry.title.toLowerCase().includes('matrix'));
-    debugLog('MATRIX DEBUG', {
-      matrixTocEntriesFound: matrixTocEntries.map(e => ({ title: e.title.substring(0, 50), page: e.pageNumber })),
-      matrixSectionsExtracted: matrixSections.map(s => ({
-        title: s.tocEntry.title.substring(0, 50),
-        contentLength: s.content.length,
-        isMatrix: s.tocEntry.isMatrix
-      }))
-    });
-
     // Store extracted content using TOC-based sections
     // NOTE: To avoid MongoDB's 16MB document limit:
     // - Don't store full rawText (not needed after parsing)
@@ -475,8 +470,7 @@ async function processDocumentAsync(
           pageNumber: section.tocEntry.pageNumber || 1,
           startPosition: section.startPosition,
           endPosition: section.endPosition,
-          sectionType: section.tocEntry.isMatrix ? 'matrix' :
-                       section.tocEntry.isSupportingEvidence ? 'supporting_evidence' :
+          sectionType: section.tocEntry.isSupportingEvidence ? 'supporting_evidence' :
                        section.tocEntry.sectionType === 'standard' ? 'narrative' : 'general',
           content: needsTruncation
             ? content.substring(0, MAX_SECTION_CONTENT_LENGTH) + '\n\n[Content truncated for storage - full content sent to AI]'
@@ -497,17 +491,6 @@ async function processDocumentAsync(
       });
     }
 
-    // Log matrix sections that will be stored
-    const matrixStoredSections = importRecord.extractedContent.sections.filter(s => s.sectionType === 'matrix');
-    debugLog('MATRIX STORED SECTIONS', {
-      count: matrixStoredSections.length,
-      sections: matrixStoredSections.map(s => ({
-        id: s.id,
-        contentLength: s.content.length,
-        suggestedStandard: s.suggestedStandard
-      }))
-    });
-
     // Add tables as sections (in addition to TOC sections)
     for (const table of parsed.tables) {
       const tableContent = formatTableAsText(table);
@@ -516,10 +499,9 @@ async function processDocumentAsync(
         pageNumber: table.pageNumber,
         startPosition: 0,
         endPosition: tableContent.length,
-        sectionType: table.tableType === 'curriculum_matrix' ? 'matrix' : 'table',
+        sectionType: 'table',
         content: tableContent,
-        confidence: 0.7,
-        suggestedStandard: table.tableType === 'curriculum_matrix' ? '11.matrix' : undefined
+        confidence: 0.7
       });
     }
 
@@ -941,27 +923,15 @@ async function sendToN8nDocumentMatcher(
       return false;
     }
 
-    // Check if this is a matrix section (should be lenient with these)
-    const isMatrixSection = section.tocEntry.isMatrix || title.includes('matrix');
-
-    // Exclude very short sections, but be lenient with matrix sections
-    // (matrix tables can be short when converted to plain text)
-    const minLength = isMatrixSection ? 20 : 100;
+    // Exclude very short sections
+    const minLength = 100;
     if (section.content.length < minLength) {
       debugLog('Excluding short section from AI processing', {
         title: section.tocEntry.title,
         length: section.content.length,
-        isMatrix: isMatrixSection,
         minLength
       });
       return false;
-    }
-
-    if (isMatrixSection) {
-      debugLog('Including matrix section for AI processing', {
-        title: section.tocEntry.title,
-        length: section.content.length
-      });
     }
 
     // Include all other sections (even supporting evidence - AI can help categorize)
@@ -1024,9 +994,6 @@ async function sendToN8nDocumentMatcher(
         contentWithHints += `<!-- SPECIFICATION HINT: ${tocSection.specHint} -->\n`;
       }
     }
-    if (tocSection.tocEntry.isMatrix) {
-      contentWithHints += `<!-- SECTION TYPE: CURRICULUM MATRIX -->\n`;
-    }
     if (tocSection.tocEntry.isSupportingEvidence) {
       contentWithHints += `<!-- SECTION TYPE: SUPPORTING EVIDENCE -->\n`;
     }
@@ -1051,7 +1018,6 @@ async function sendToN8nDocumentMatcher(
         standardCode: tocSection.tocEntry.standardCode,
         specCode: tocSection.tocEntry.specCode,
         sectionType: tocSection.tocEntry.sectionType,
-        isMatrix: tocSection.tocEntry.isMatrix,
         isSupportingEvidence: tocSection.tocEntry.isSupportingEvidence
       },
       options: {
@@ -1167,7 +1133,7 @@ async function processWithLocalMapper(
         extractedSectionId: table.id,
         standardCode: tableMapping.suggestedStandardCode,
         specCode: tableMapping.suggestedSpecCode,
-        fieldType: table.tableType === 'curriculum_matrix' ? 'matrix' : 'table',
+        fieldType: 'table',
         mappedBy: 'auto',
         mappedAt: new Date()
       });
@@ -1200,14 +1166,13 @@ async function processWithLocalMapper(
 /**
  * Detect section type from content
  */
-function detectSectionType(content: string, tables: any[]): 'narrative' | 'table' | 'matrix' | 'syllabus' | 'cv' | 'form' | 'unknown' {
+function detectSectionType(content: string, tables: any[]): 'narrative' | 'table' | 'syllabus' | 'cv' | 'form' | 'unknown' {
   const contentType = sectionMapperService.detectContentType(content);
 
   switch (contentType) {
     case 'syllabus': return 'syllabus';
     case 'cv': return 'cv';
     case 'evaluation_form': return 'form';
-    case 'matrix': return 'matrix';
     default: return 'narrative';
   }
 }
@@ -1705,53 +1670,6 @@ export const mapSection = async (req: AuthenticatedRequest, res: Response) => {
  * Apply all mappings to the submission
  * Writes matched content to the narrative rich text editor for each spec
  */
-/**
- * Data-integrity guard: a section the importer CLASSIFIED as a matrix must never
- * be silently dropped on apply — once the self-study is locked, the PC can't
- * recover it. applyMappings only persists sections the PC explicitly mapped, so
- * a matrix that wasn't hand-placed would vanish. This materializes EVERY
- * matrix-classified section of the import into the CurriculumMatrix.rawContent,
- * idempotently (deduped by content signature). Returns how many it added.
- */
-async function materializeImportedMatrices(importRecord: any, userId?: string): Promise<number> {
-  const sigOf = (html: string) => (html || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 120).toLowerCase();
-  const candidates: { content: string; title?: string; standardCode?: string }[] = [];
-  for (const s of (importRecord.detectedSections || [])) {
-    if (s?.isMatrix) candidates.push({ content: s.htmlContent || s.fullContent || '', title: s.headerText, standardCode: s.standardCode });
-  }
-  for (const s of (importRecord.extractedContent?.sections || [])) {
-    if (s?.isMatrix || s?.sectionType === 'matrix') candidates.push({ content: s.content || (s as any).htmlContent || '', title: (s as any).title || (s as any).heading, standardCode: (s as any).standardCode });
-  }
-  const withContent = candidates.filter((c) => (c.content || '').trim().length > 0);
-  if (!withContent.length) return 0;
-
-  let matrix = await CurriculumMatrix.findOne({ submissionId: importRecord.submissionId });
-  if (!matrix) {
-    matrix = new CurriculumMatrix({
-      submissionId: importRecord.submissionId,
-      name: 'Curriculum Matrix',
-      courses: [], standards: [], rawContent: [],
-      lastModifiedBy: userId ? new mongoose.Types.ObjectId(userId) : new mongoose.Types.ObjectId(String(importRecord.submissionId)),
-    });
-  }
-  if (!matrix.rawContent) matrix.rawContent = [];
-  const seen = new Set((matrix.rawContent || []).map((rc: any) => sigOf(rc.content)));
-  let added = 0;
-  for (const c of withContent) {
-    const sig = sigOf(c.content);
-    if (!sig || seen.has(sig)) continue;
-    seen.add(sig);
-    matrix.rawContent.push({
-      id: uuidv4(), content: c.content, title: c.title, standardCode: c.standardCode || undefined,
-      sourceImportId: String(importRecord._id), addedAt: new Date(),
-      addedBy: (userId ? new mongoose.Types.ObjectId(userId) : (matrix.lastModifiedBy as any)), processed: false,
-    } as any);
-    added++;
-  }
-  if (added > 0) { matrix.markModified('rawContent'); await saveWithRetry(matrix); }
-  return added;
-}
-
 export const applyMappings = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId } = req.params;
@@ -1867,26 +1785,15 @@ export const applyMappings = async (req: AuthenticatedRequest, res: Response) =>
 
     await saveWithRetry(submission);
 
-    // Never drop a matrix the importer classified — materialize every matrix
-    // section, even ones the PC didn't hand-place (idempotent).
-    let matricesMaterialized = 0;
-    try {
-      matricesMaterialized = await materializeImportedMatrices(importRecord, req.user?.id);
-    } catch (mErr) {
-      console.error('materializeImportedMatrices failed (non-fatal):', mErr);
-    }
-
     debugLog('Submission saved successfully', {
       appliedCount,
-      appliedMappings,
-      matricesMaterialized
+      appliedMappings
     });
 
     return res.json({
       success: true,
       appliedCount,
       appliedMappings,
-      matricesMaterialized,
       message: `Applied ${appliedCount} mappings to submission`
     });
   } catch (error) {
@@ -1951,12 +1858,12 @@ export const getUnmappedContent = async (req: Request, res: Response) => {
 export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId, sectionId } = req.params;
-    const { action, standardCode, specCode, toSupportingEvidence, toCurriculumMatrix, matrixType } = req.body;
+    const { action, standardCode, specCode, toSupportingEvidence } = req.body;
 
     const _imp = await requireImportAccess(req, res, req.params.importId);
     if (!_imp) return;
 
-    debugLog('handleUnmapped called', { importId, sectionId, action, standardCode, specCode, toSupportingEvidence, toCurriculumMatrix, matrixType });
+    debugLog('handleUnmapped called', { importId, sectionId, action, standardCode, specCode, toSupportingEvidence });
 
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
@@ -2063,72 +1970,6 @@ export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) =
       importRecord.unmappedContent[unmappedIndex].reviewedBy = new mongoose.Types.ObjectId(req.user?.id);
       importRecord.unmappedContent[unmappedIndex].reviewedAt = new Date();
 
-    } else if (action === 'move_to_matrix' || toCurriculumMatrix) {
-      // Move content to curriculum matrix raw content
-      const targetMatrixType = matrixType || 'non_human_services_courses';
-
-      // Find or create curriculum matrix for this submission
-      let matrix = await CurriculumMatrix.findOne({
-        submissionId: importRecord.submissionId,
-        matrixType: targetMatrixType
-      });
-
-      if (!matrix) {
-        // Create new matrix if it doesn't exist
-        matrix = new CurriculumMatrix({
-          submissionId: importRecord.submissionId,
-          matrixType: targetMatrixType,
-          name: targetMatrixType === 'human_services_courses'
-            ? 'Human Services Courses'
-            : targetMatrixType === 'non_human_services_courses'
-              ? 'Non-Human Services Courses'
-              : 'Custom Matrix',
-          lastModifiedBy: new mongoose.Types.ObjectId(req.user?.id),
-          courses: [],
-          standards: [],
-          rawContent: []
-        });
-      }
-
-      // Initialize rawContent array if not present
-      if (!matrix.rawContent) {
-        matrix.rawContent = [];
-      }
-
-      // Add the section content to raw content
-      matrix.rawContent.push({
-        id: uuidv4(),
-        content: section?.content || '',
-        sourceImportId: importId,
-        addedAt: new Date(),
-        addedBy: new mongoose.Types.ObjectId(req.user?.id),
-        processed: false
-      });
-
-      matrix.markModified('rawContent');
-      await saveWithRetry(matrix);
-
-      // Update import record
-      importRecord.unmappedContent[unmappedIndex].action = 'assigned';
-      importRecord.unmappedContent[unmappedIndex].reviewedBy = new mongoose.Types.ObjectId(req.user?.id);
-      importRecord.unmappedContent[unmappedIndex].reviewedAt = new Date();
-
-      importRecord.mappedSections.push({
-        extractedSectionId: sectionId,
-        standardCode: 'MATRIX',
-        specCode: targetMatrixType,
-        fieldType: 'matrix',
-        mappedBy: 'manual',
-        mappedByUserId: new mongoose.Types.ObjectId(req.user?.id),
-        mappedAt: new Date()
-      });
-
-      debugLog('Moved to curriculum matrix', {
-        matrixType: targetMatrixType,
-        matrixId: matrix._id,
-        rawContentCount: matrix.rawContent.length
-      });
-
     } else {
       return res.status(400).json({ error: 'Invalid action or missing parameters' });
     }
@@ -2139,9 +1980,7 @@ export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) =
 
     return res.json({
       success: true,
-      message: toCurriculumMatrix || action === 'move_to_matrix'
-        ? 'Content moved to curriculum matrix'
-        : toSupportingEvidence
+      message: toSupportingEvidence
           ? 'Content moved to supporting evidence'
           : `Content ${action}ed successfully`
     });
@@ -2449,7 +2288,6 @@ export const confirmSectionSelections = async (req: AuthenticatedRequest, res: R
         title: section.headerText,
         level: section.level,
         sectionType: section.isAppendix ? 'appendix' : 'standard',
-        isMatrix: section.headerText?.toLowerCase().includes('matrix') || false,
         isSupportingEvidence: section.headerText?.toLowerCase().includes('evidence') || false
       },
       content: section.fullContent,
@@ -2813,8 +2651,8 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
     if (!_imp) return;
 
     // Validate input
-    if (!sectionType || !['standard', 'matrix', 'appendix', 'skip'].includes(sectionType)) {
-      return res.status(400).json({ error: 'sectionType must be standard, matrix, appendix, or skip' });
+    if (!sectionType || !['standard', 'appendix', 'skip'].includes(sectionType)) {
+      return res.status(400).json({ error: 'sectionType must be standard, appendix, or skip' });
     }
     if (!title && sectionType !== 'skip') {
       return res.status(400).json({ error: 'title is required for non-skip sections' });
@@ -2844,8 +2682,7 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
       const newSection: IDetectedSection = {
         id: sectionId,
         level: 1,
-        headerType: sectionType === 'standard' ? 'standard' :
-                    sectionType === 'matrix' ? 'heading' : 'appendix',
+        headerType: sectionType === 'standard' ? 'standard' : 'appendix',
         headerText: title,
         previewText: extractedText.substring(0, 200) + (extractedText.length > 200 ? '...' : ''),
         fullContent: extractedText,
@@ -2858,7 +2695,6 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
         standardCode: sectionType === 'standard' ? standardCode : undefined,
         specCode: sectionType === 'standard' ? specCode : undefined,
         appliedDirectly: sectionType === 'standard' && appliedDirectly ? true : false,
-        isMatrix: sectionType === 'matrix',
         textStartOffset: typeof textStartOffset === 'number' && textStartOffset >= 0 ? textStartOffset : undefined,
         textLength: typeof textLength === 'number' && textLength > 0 ? textLength : undefined
       };
@@ -2991,8 +2827,7 @@ export const getTaggedSections = async (req: Request, res: Response) => {
       return {
         id: s.id,
         title: s.headerText, // Map headerText to title for frontend
-        sectionType: s.isMatrix ? 'matrix' :
-                     s.isAppendix ? 'appendix' :
+        sectionType: s.isAppendix ? 'appendix' :
                      s.standardCode ? 'standard' : 'standard',
         previewText: s.previewText,
         endPreviewText, // Last 100 chars to help find where extraction ends in document
@@ -3048,8 +2883,7 @@ export const getTaggedSectionContent = async (req: Request, res: Response) => {
     return res.json({
       id: section.id,
       title: section.headerText,
-      sectionType: section.isMatrix ? 'matrix' :
-                   section.isAppendix ? 'appendix' :
+      sectionType: section.isAppendix ? 'appendix' :
                    section.standardCode ? 'standard' : 'standard',
       // Return HTML content to preserve formatting (tables, lists, etc.)
       htmlContent: section.htmlContent || null,
@@ -3195,7 +3029,7 @@ export const debugImport = async (req: AuthenticatedRequest, res: Response) => {
     const sections = (importRecord.detectedSections || []).map((section: any) => ({
       sectionId: section.id,
       headerText: section.headerText,
-      sectionType: section.isMatrix ? 'matrix' : (section.isAppendix ? 'appendix' : 'standard'),
+      sectionType: section.isAppendix ? 'appendix' : 'standard',
       standardCode: section.standardCode || null,
       specCode: section.specCode || null,
       textStartOffset: section.textStartOffset ?? null,
@@ -3292,7 +3126,7 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
     for (const section of sections) {
       const s = section as any;
       const safeTitle = (s.headerText || 'Untitled').replace(/-->/g, '—>').replace(/--/g, '—');
-      const sectionType = s.isMatrix ? 'matrix' : (s.isAppendix ? 'appendix' : 'standard');
+      const sectionType = s.isAppendix ? 'appendix' : 'standard';
       const marker = `<!-- EXTRACTED:${s.id}:${sectionType}:${safeTitle}:${s.fullContent?.length || 0} -->`;
 
       // Tier 1: Direct removedHtml match (non-table content only)
@@ -3607,138 +3441,3 @@ export const finishTagging = async (req: AuthenticatedRequest, res: Response) =>
     return res.status(500).json({ error: 'Failed to finish tagging' });
   }
 };
-
-
-/**
- * Importer kind "Curriculum matrix" — see the call site. Returns 201 with how
- * many matrix rows / coded cells were loaded, or 422 when the document has no
- * recognisable matrix (the file is still kept, filed under 2.e).
- */
-async function loadStandaloneMatrix(req: any, res: Response, submission: any, importRecord: any, file: any) {
-  const uploaderId = new mongoose.Types.ObjectId(req.user?.id);
-  const level = String(submission.programLevel || req.body.programLevel || 'bachelors');
-  const isDocx = /\.docx$/i.test(file.originalname) || /wordprocessingml/.test(file.mimetype || '');
-  if (!isDocx) {
-    return res.status(422).json({ error: 'A curriculum matrix must be a Word (.docx) file. Save it as .docx and try again.' });
-  }
-  // The same file may already be in the library (a folder upload put it
-  // there): reuse it rather than store a second copy.
-  const same: any = await SupportingEvidence.findOne({
-    submissionId: submission._id,
-    isDeleted: { $ne: true },
-    isCurrentVersion: { $ne: false },
-    'file.originalName': file.originalname,
-    'file.size': file.buffer.length,
-  });
-  if (same) {
-    same.standardCode = '2';
-    same.specCode = 'e';
-    same.tags = Array.from(new Set([...(same.tags || []), 'kind:matrix', 'curriculum-matrix']));
-    await same.save();
-  }
-  const evidence: any = same || await SupportingEvidence.create({
-    institutionId: submission.institutionId,
-    submissionId: submission._id,
-    uploadedBy: uploaderId,
-    evidenceType: 'document',
-    standardCode: '2',
-    specCode: 'e',
-    file: {
-      filename: file.originalname,
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      size: file.buffer.length,
-      data: file.buffer.toString('base64'),
-      encoding: 'base64',
-      storageType: 'base64',
-      uploadedAt: new Date(),
-      uploadedBy: uploaderId,
-    } as any,
-    description: file.originalname,
-    versionNumber: 1,
-    isCurrentVersion: true,
-    isDeleted: false,
-    linkedNarratives: [],
-    tags: ['ai-import', 'direct-upload', 'kind:matrix', 'curriculum-matrix'],
-  });
-  const out = await extractMatrix({ base64: file.buffer.toString('base64'), filename: file.originalname, programLevel: level });
-  const matrices = (out.matrices || []).filter((m: any) => m?.htmlSnippet && Array.isArray(m.cells) && m.cells.length);
-  if (!matrices.length) {
-    await SelfStudyImport.findByIdAndUpdate(importRecord._id, { $set: { status: 'completed' } });
-    return res.status(422).json({
-      importId: importRecord._id,
-      evidenceId: evidence._id,
-      error: out.error
-        ? `The matrix could not be read: ${out.error}`
-        : 'No curriculum-matrix rows were recognised in this document. It was saved to your File Library under 2.e.',
-    });
-  }
-  const loaded = await applyStandaloneMatrices(submission._id, matrices, uploaderId, file.originalname);
-  await SelfStudyImport.findByIdAndUpdate(importRecord._id, { $set: { status: 'completed' } });
-  return res.status(201).json({
-    importId: importRecord._id,
-    directStored: true,
-    kind: 'matrix',
-    evidenceId: evidence._id,
-    fileName: file.originalname,
-    matrices: matrices.length,
-    rows: loaded.rows,
-    cells: loaded.cells,
-    message: `Loaded ${loaded.rows} matrix rows (${loaded.cells} coded cells) into your Curriculum Matrix and filed the document under 2.e.`,
-  });
-}
-
-/**
- * Put standalone-matrix results where the rest of the portal reads them:
- * Submission.aiMatrixState.matrices (Review's Matrices view + spec deep links)
- * and the CurriculumMatrix (the editor's Curriculum Matrix view). A new upload
- * REPLACES the previous standalone matrix of the same id; matrices that came
- * from a self-study import are left alone.
- */
-export async function applyStandaloneMatrices(submissionId: any, matrices: any[], userId: any, sourceName: string) {
-  const sub: any = await Submission.findById(submissionId).select('aiMatrixState submitterId');
-  const prev: any[] = Array.isArray(sub?.aiMatrixState?.matrices) ? sub.aiMatrixState.matrices : [];
-  const tagged = matrices.map((m: any) => ({ ...m, matrixId: `standalone-${m.matrixId || 'matrix'}`, name: `${m.name || 'Curriculum Matrix'} (${sourceName})`, standalone: true }));
-  const ids = new Set(tagged.map((m: any) => m.matrixId));
-  const merged = [...prev.filter((m: any) => !ids.has(m?.matrixId) && !m?.standalone), ...tagged];
-  await Submission.updateOne(
-    { _id: submissionId },
-    { $set: { 'aiMatrixState.matrices': merged, 'aiMatrixState.lastUpdatedAt': new Date() } }
-  );
-  let cm: any = await CurriculumMatrix.findOne({ submissionId });
-  const who = userId || sub?.submitterId;
-  if (!cm) {
-    cm = new CurriculumMatrix({
-      submissionId,
-      matrixType: 'human_services_courses',
-      name: 'Curriculum Matrix',
-      version: 1,
-      lastModified: new Date(),
-      lastModifiedBy: who,
-      courses: [],
-      standards: [],
-      rawContent: [],
-    });
-  }
-  if (!Array.isArray(cm.rawContent)) cm.rawContent = [];
-  // Drop earlier standalone uploads, keep anything else (e.g. a matrix pasted by hand).
-  cm.rawContent = cm.rawContent.filter((r: any) => !String(r?.id || '').startsWith('matrix-standalone-'));
-  for (const m of tagged) {
-    cm.rawContent.push({
-      id: `matrix-${m.matrixId}`,
-      content: m.htmlSnippet,
-      title: m.name,
-      addedAt: new Date(),
-      addedBy: who,
-      processed: true,
-      processedAt: new Date(),
-    });
-  }
-  cm.lastModified = new Date();
-  cm.markModified('rawContent');
-  await cm.save();
-  return {
-    rows: tagged.reduce((a: number, m: any) => a + (m.rowsMatched || 0), 0),
-    cells: tagged.reduce((a: number, m: any) => a + (m.cells?.length || 0), 0),
-  };
-}

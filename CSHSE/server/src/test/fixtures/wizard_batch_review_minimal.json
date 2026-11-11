@@ -19,8 +19,7 @@
     "wizardStep": "parse",
     "aiBuckets": {},
     "aiTags": [],
-    "aiPlaceholderSections": [],
-    "aiMatrices": []
+    "aiPlaceholderSections": []
   },
   "batch": {
     "fileCount": 2,
@@ -49,13 +48,11 @@
               }
             ],
             "evidenceText": [],
-            "evidenceFiles": [],
-            "matrixCells": []
+            "evidenceFiles": []
           }
         },
         "aiTags": [],
-        "aiPlaceholderSections": [],
-        "aiMatrices": []
+        "aiPlaceholderSections": []
       },
       {
         "originalFilename": "Standards-6-9-CurriculumLead.docx",
@@ -79,13 +76,11 @@
               }
             ],
             "evidenceText": [],
-            "evidenceFiles": [],
-            "matrixCells": []
+            "evidenceFiles": []
           }
         },
         "aiTags": [],
-        "aiPlaceholderSections": [],
-        "aiMatrices": []
+        "aiPlaceholderSections": []
       }
     ]
   }

@@ -6,7 +6,7 @@ import mongoose, { Schema, Document } from 'mongoose';
  * Distinct from the combined reader report (readerReportGenerator.ts). One per
  * submission. Stores ONLY the lead-reader-authored fields; the system-generated
  * sections (program metadata, required-courses list, compiled non-compliance)
- * are assembled fresh on read from the submission / matrices / reader comments,
+ * are assembled fresh on read from the submission / evidence / reader comments,
  * so they always reflect current data. Editable fields default from the system
  * where sensible (e.g. accreditationStatus from submission.type) but the lead
  * reader can override.
@@ -37,7 +37,7 @@ export interface ILeadReaderReport extends Document {
   // --- Non-compliance (pre-compiled from reader verdicts+comments, editable) ---
   nonComplianceText: string;
 
-  // --- Required courses override (auto-generated from the matrix by default) ---
+  // --- Required courses override (auto-derived from the syllabi file names by default) ---
   requiredCoursesOverride: string;    // when non-empty, replaces the auto list
 
   // --- Site visitors. There are exactly two: the lead reader is always SV1,

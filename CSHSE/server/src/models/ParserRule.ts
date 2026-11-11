@@ -51,7 +51,7 @@ export interface IParserRule extends Document {
     specAssignment?: 'first-column-letter' | 'catalog-text-match' | 'explicit';
     contentCell?: 'last-non-marker' | 'column-N' | 'after-response-marker';
     promptResponseSplit?: 'response-marker' | 'first-paragraph' | 'none';
-    classification?: 'narrative' | 'evidence-text' | 'appendix' | 'syllabus' | 'cv' | 'matrix' | 'intro';
+    classification?: 'narrative' | 'evidence-text' | 'appendix' | 'syllabus' | 'cv' | 'intro';
     params?: Record<string, any>;
   };
 

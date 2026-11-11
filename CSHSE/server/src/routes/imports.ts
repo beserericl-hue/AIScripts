@@ -47,10 +47,7 @@ import {
   contractCheckImport,
   redetectImport,
   createImportCorrection,
-  listImportCorrections,
-  inferMatrixColumns,
-  confirmMatrixColumn,
-  inferMatrixRowSpec
+  listImportCorrections
 } from '../controllers/aiImportController';
 // CR-041 — Multi-file batched import.
 import {
@@ -236,16 +233,6 @@ router.post('/:importId/redetect', redetectImport);
 // Coordinator-supplied corrections — see ImportCorrection model.
 router.post('/:importId/corrections', createImportCorrection);
 router.get('/:importId/corrections', listImportCorrections);
-
-// CR-025 — matrix column inference + confirm. The wizard's Matrix step
-// posts here per matrix to get AI-suggested column → course mappings,
-// then again per confirmed override.
-router.post('/:importId/matrix/infer-columns', inferMatrixColumns);
-router.post('/:importId/matrix/confirm-column', confirmMatrixColumn);
-
-// CR-030 — infer subspec for a matrix row when standard is known but
-// subspec is unknown (the "Spec 12.?" case in the matrix step).
-router.post('/:importId/matrix/infer-row-spec', inferMatrixRowSpec);
 
 // ============================================
 // PART 6: Section Selection Before AI Processing

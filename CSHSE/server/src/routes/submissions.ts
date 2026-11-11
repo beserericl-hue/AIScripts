@@ -139,13 +139,13 @@ router.patch('/:submissionId/narrative', submissionLockout, saveNarrative);
 router.patch('/:submissionId/introduction', submissionLockout, saveIntroduction);
 
 // ============================================
-// CR-043 — submission-scoped persisted Review + Matrix state
+// CR-043 — submission-scoped persisted Review state
 // ============================================
 //
 // Review state survives wizard close + re-open + multi-author imports.
 // Per-item approve/discard mutations write through to the persisted
 // state. Apply walks the persisted state and pushes approved items
-// into the Submission's narratives + supporting evidence + matrices.
+// into the Submission's narratives + supporting evidence.
 
 import {
   getReviewState,
@@ -159,8 +159,6 @@ import {
   saveReviewState,
   finishReview,
   applyReviewState,
-  getMatrixState,
-  setMatrixRowEdit,
   evaluateAllSpecs,
   getEvalProgress,
   getReviewEvidenceDocFile,
@@ -168,7 +166,6 @@ import {
   getReviewEvidenceDocPublicUrl,
   recomputeCoverage,
   getCoverageProgress,
-  denoiseNarratives,
   reconcileSpecLevel,
   suggestStandardForEvidence,
   aiPlaceUnassignedEvidence,
@@ -216,8 +213,6 @@ router.post('/:submissionId/review/dedupe-imports', submissionLockout, dedupeImp
 // Strip the "<Standard Title> Context: <rubric>" descriptor bleed from stored
 // narratives (mirrors the template-walker fix for already-parsed submissions).
 router.post('/:submissionId/review/strip-context-bleed', submissionLockout, stripContextBleed);
-// Clean curriculum-matrix garbage out of an already-parsed submission's narratives.
-router.post('/:submissionId/review/denoise-narratives', submissionLockout, denoiseNarratives);
 // Remove EMPTY spec rows not in the submission's degree level (an associate study
 // seeded with baccalaureate-only specs like 12.g/12.h). Prunes empties only.
 router.post('/:submissionId/review/reconcile-spec-level', submissionLockout, reconcileSpecLevel);
@@ -240,8 +235,6 @@ router.post('/:submissionId/review/save-state', submissionLockout, saveReviewSta
 // CR-048 — "I'm done reviewing": discard all remaining un-triaged drafts.
 router.post('/:submissionId/review/finish', submissionLockout, finishReview);
 router.post('/:submissionId/review/apply', submissionLockout, applyReviewState);
-router.get('/:submissionId/matrix-state', getMatrixState);
-router.post('/:submissionId/matrix-state', submissionLockout, setMatrixRowEdit);
 
 /**
  * @route   GET /api/submissions/:submissionId/preflight

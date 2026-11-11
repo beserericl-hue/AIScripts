@@ -50,7 +50,6 @@
         ],
         "evidenceText": [],
         "evidenceFiles": [],
-        "matrixCells": [],
         "coverageScore": 0.85,
         "coverageCovered": true,
         "coverageGaps": [],
@@ -86,7 +85,6 @@
           }
         ],
         "evidenceFiles": [],
-        "matrixCells": [],
         "coverageScore": 0.78,
         "coverageCovered": true,
         "coverageGaps": [],
@@ -111,7 +109,6 @@
         ],
         "evidenceText": [],
         "evidenceFiles": [],
-        "matrixCells": [],
         "coverageScore": 0.82,
         "coverageCovered": true,
         "coverageGaps": [],
@@ -121,7 +118,6 @@
     "_aiTags_note": "Intentionally empty — flagged tags trigger the wizard to auto-route to the tag-triage step ahead of Review, breaking specs that want to land on Review. The 21_empty_buckets_guard / future tag specs should use a dedicated fixture with tags populated.",
     "aiTags": [],
     "aiPlaceholderSections": [],
-    "aiMatrices": [],
     "aiStages": [
       { "name": "mammoth", "state": "done" },
       { "name": "deep_walker", "state": "done" },

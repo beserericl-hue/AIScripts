@@ -49,7 +49,6 @@ async function seed(ownerId: any) {
           evidenceFiles: [
             { sectionId: 'f1', heading: 'Evidence File One', snippet: 'file body', wordCount: 2, confidence: 0.9, acceptState: 'pending', rationale: '' },
           ],
-          matrixCells: [],
         },
       },
       tags: [], cvs: [], evidenceDocs: [], introductions: {},

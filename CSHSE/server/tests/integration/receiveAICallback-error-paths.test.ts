@@ -74,7 +74,6 @@ describe('receiveAICallback — edge + error paths', () => {
       buckets: {},
       tags: [],
       placeholderSections: [],
-      matrices: [],
       errors: [],
     };
     const { signature } = signRequest(body);
@@ -97,7 +96,6 @@ describe('receiveAICallback — edge + error paths', () => {
       status: 'parsed',
       buckets: {},
       tags: [],
-      matrices: [],
       cvs: [{ sectionId: 'cv-1', facultyName: 'Dr X' }],
       evidenceDocs: [],
       introductions: {},
@@ -119,7 +117,6 @@ describe('receiveAICallback — edge + error paths', () => {
       status: 'parsed',
       buckets: {},
       tags: [],
-      matrices: [],
       cvs: [],
       evidenceDocs: [{ sectionId: 'ed-1', docSubKind: 'paper', title: 'Sample paper' }],
       introductions: {},
@@ -141,7 +138,6 @@ describe('receiveAICallback — edge + error paths', () => {
       status: 'parsed',
       buckets: {},
       tags: [],
-      matrices: [],
       cvs: [],
       evidenceDocs: [],
       introductions: {
@@ -169,10 +165,10 @@ describe('receiveAICallback — edge + error paths', () => {
         '1.a': {
           standardCode: '1', specCode: 'a',
           narratives: [{ sectionId: 'sec-1', heading: 'h', snippet: 's', wordCount: 1, confidence: 0.9 }],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
         },
       },
-      tags: [], placeholderSections: [], matrices: [],
+      tags: [], placeholderSections: [],
     };
     const { signature } = signRequest(body);
     const res = await request(app)
@@ -192,7 +188,7 @@ describe('receiveAICallback — edge + error paths', () => {
 
   it('returns 404 when the import was deleted before callback arrived', async () => {
     const ghostId = new mongoose.Types.ObjectId();
-    const body = { status: 'parsed', buckets: {}, tags: [], placeholderSections: [], matrices: [] };
+    const body = { status: 'parsed', buckets: {}, tags: [], placeholderSections: [] };
     const { signature } = signRequest(body);
     const res = await request(app)
       .post(`/api/imports/${ghostId}/ai-callback`)
@@ -203,7 +199,7 @@ describe('receiveAICallback — edge + error paths', () => {
 
   it('rejects callbacks signed with the wrong secret', async () => {
     const { imp } = await setupImport();
-    const body = { status: 'parsed', buckets: {}, tags: [], placeholderSections: [], matrices: [] };
+    const body = { status: 'parsed', buckets: {}, tags: [], placeholderSections: [] };
     const { signature } = signRequest(body, 'wrong-secret-xx');
     const res = await request(app)
       .post(`/api/imports/${imp._id}/ai-callback`)
@@ -217,7 +213,7 @@ describe('receiveAICallback — edge + error paths', () => {
     const body = {
       status: 'failed',
       buckets: {},
-      tags: [], placeholderSections: [], matrices: [],
+      tags: [], placeholderSections: [],
       errors: ['mammoth: cannot extract HTML from corrupted docx'],
     };
     const { signature } = signRequest(body);
@@ -239,10 +235,10 @@ describe('receiveAICallback — edge + error paths', () => {
         '1.a': {
           standardCode: '1', specCode: 'a',
           narratives: [{ sectionId: 'sec-replay', heading: 'h', snippet: 's', wordCount: 1, confidence: 0.9 }],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
         },
       },
-      tags: [], placeholderSections: [], matrices: [],
+      tags: [], placeholderSections: [],
     };
     const { signature } = signRequest(body);
     await request(app)
@@ -270,10 +266,10 @@ describe('receiveAICallback — edge + error paths', () => {
         '1.a': {
           standardCode: '1', specCode: 'a',
           narratives: [{ sectionId: 'sec-cov', heading: 'h', snippet: 's', wordCount: 1, confidence: 0.9 }],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
         },
       },
-      tags: [], placeholderSections: [], matrices: [],
+      tags: [], placeholderSections: [],
       coverageReport: {
         totalSections: 100,
         sectionsToBuckets: 80,
@@ -305,10 +301,10 @@ describe('receiveAICallback — edge + error paths', () => {
         '1.a': {
           standardCode: '1', specCode: 'a',
           narratives: [{ sectionId: 'sec-hint', heading: 'h', snippet: 's', wordCount: 1, confidence: 0.9 }],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
         },
       },
-      tags: [], placeholderSections: [], matrices: [],
+      tags: [], placeholderSections: [],
       introductionHints: {
         'sec-a': 'introduction:document',
         'sec-b': 'introduction:standard-3',
@@ -330,7 +326,7 @@ describe('receiveAICallback — edge + error paths', () => {
     const body = {
       status: 'parsed',
       buckets: {},
-      tags: [], placeholderSections: [], matrices: [],
+      tags: [], placeholderSections: [],
       cvs: [{ sectionId: 'cv-only', facultyName: 'Dr Solo' }],
       standaloneCv: true,
     };
@@ -356,8 +352,8 @@ describe('receiveAICallback — edge + error paths', () => {
 
     const body = {
       status: 'parsed',
-      buckets: { '1.a': { standardCode: '1', specCode: 'a', narratives: [{ sectionId: 's-x', heading: 'h', snippet: 's', wordCount: 1, confidence: 0.9 }], evidenceText: [], evidenceFiles: [], matrixCells: [] } },
-      tags: [], placeholderSections: [], matrices: [],
+      buckets: { '1.a': { standardCode: '1', specCode: 'a', narratives: [{ sectionId: 's-x', heading: 'h', snippet: 's', wordCount: 1, confidence: 0.9 }], evidenceText: [], evidenceFiles: [] } },
+      tags: [], placeholderSections: [],
     };
     const { signature } = signRequest(body);
     const res = await request(app)

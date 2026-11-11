@@ -63,7 +63,6 @@ async function seedChild(
     aiBuckets: buckets,
     aiTags: [],
     aiPlaceholderSections: [],
-    aiMatrices: [],
   } as any);
 }
 
@@ -86,7 +85,6 @@ function makeBucket(std: string, spec: string, items: Array<{
     })),
     evidenceText: [],
     evidenceFiles: [],
-    matrixCells: [],
     coverageScore: null,
     coverageCovered: null,
     coverageGaps: [],

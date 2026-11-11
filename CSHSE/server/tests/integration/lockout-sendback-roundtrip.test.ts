@@ -48,7 +48,6 @@ function reviewState(overrides: any = {}) {
         ],
         evidenceText: [],
         evidenceFiles: [],
-        matrixCells: [],
       },
     },
     tags: [],

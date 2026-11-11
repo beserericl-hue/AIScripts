@@ -30,8 +30,7 @@ export type CorrectionType =
 
 export type ExpectedSectionType =
   | 'narrative_response'
-  | 'supporting_evidence'
-  | 'curriculum_matrix';
+  | 'supporting_evidence';
 
 export interface IImportCorrection extends Document {
   submissionId: mongoose.Types.ObjectId;
@@ -87,7 +86,7 @@ const ImportCorrectionSchema = new Schema<IImportCorrection>(
     expectedSpec: { type: String, required: true },
     expectedSectionType: {
       type: String,
-      enum: ['narrative_response', 'supporting_evidence', 'curriculum_matrix'],
+      enum: ['narrative_response', 'supporting_evidence'],
       required: true,
     },
     sourceHeading: { type: String, default: '' },
