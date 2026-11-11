@@ -3569,7 +3569,22 @@ async function loadStandaloneMatrix(req: any, res: Response, submission: any, im
   if (!isDocx) {
     return res.status(422).json({ error: 'A curriculum matrix must be a Word (.docx) file. Save it as .docx and try again.' });
   }
-  const evidence = await SupportingEvidence.create({
+  // The same file may already be in the library (a folder upload put it
+  // there): reuse it rather than store a second copy.
+  const same: any = await SupportingEvidence.findOne({
+    submissionId: submission._id,
+    isDeleted: { $ne: true },
+    isCurrentVersion: { $ne: false },
+    'file.originalName': file.originalname,
+    'file.size': file.buffer.length,
+  });
+  if (same) {
+    same.standardCode = '2';
+    same.specCode = 'e';
+    same.tags = Array.from(new Set([...(same.tags || []), 'kind:matrix', 'curriculum-matrix']));
+    await same.save();
+  }
+  const evidence: any = same || await SupportingEvidence.create({
     institutionId: submission.institutionId,
     submissionId: submission._id,
     uploadedBy: uploaderId,

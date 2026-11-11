@@ -70,6 +70,19 @@ describe('import upload — Curriculum matrix kind', () => {
     expect(cm.rawContent[0].title).toContain('Matrix v2.docx');
   });
 
+  it('reuses the same file already in the library instead of storing a second copy', async () => {
+    extractMatrix.mockResolvedValue({ matrices: [WIRE] });
+    const { token, sub } = await seed();
+    const first = await upload(token, sub._id);
+    await SupportingEvidence.updateOne({ _id: first.body.evidenceId }, { $unset: { standardCode: '', specCode: '' }, $set: { tags: [] } });
+    const again = await upload(token, sub._id);
+    expect(String(again.body.evidenceId)).toBe(String(first.body.evidenceId));
+    expect(await SupportingEvidence.countDocuments({ submissionId: sub._id, isDeleted: { $ne: true } })).toBe(1);
+    const ev: any = await SupportingEvidence.findById(first.body.evidenceId).lean();
+    expect(ev).toMatchObject({ standardCode: '2', specCode: 'e' });
+    expect(ev.tags).toContain('kind:matrix');
+  });
+
   it('NEGATIVE: a document with no recognisable matrix answers 422 and changes no matrix (the file is kept under 2.e)', async () => {
     extractMatrix.mockResolvedValue({ matrices: [] });
     const { token, sub } = await seed();
