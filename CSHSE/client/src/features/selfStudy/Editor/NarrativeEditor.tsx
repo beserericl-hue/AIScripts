@@ -663,7 +663,7 @@ export function NarrativeEditor({
             {specParts.length > 0 && (
               <div className="mt-2 rounded border border-teal-200 bg-white/70 px-3 py-2" data-testid="editor-parts-panel">
                 <p className="text-xs font-semibold text-teal-800">
-                  This specification has {specParts.length} numbered parts. Address each one in the narrative, then approve it.
+                  This specification has {specParts.length} numbered parts. Write each part under its own heading ({standardCode}.{specCode}.1 …) in the narrative, then approve it. Click a part to jump to its text.
                 </p>
                 <SpecPartsList
                   submissionId={submissionId}
@@ -671,6 +671,21 @@ export function NarrativeEditor({
                   specCode={specCode}
                   surface="editor"
                   readOnly={readOnly}
+                  onOpenPart={(n) => {
+                    // The part's text sits under its "4.a.2 …" heading in the narrative.
+                    const label = `${standardCode}.${specCode}.${n}`;
+                    const dom = editor?.view?.dom as HTMLElement | undefined;
+                    const heads = Array.from(dom?.querySelectorAll<HTMLElement>('h1,h2,h3,p') || []);
+                    const head = heads.find((h) => {
+                      const t = (h.textContent || '').replace(/\s+/g, ' ').trim();
+                      return t === label || t.startsWith(`${label} `);
+                    });
+                    if (head) {
+                      head.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                      head.classList.add('bg-yellow-100');
+                      window.setTimeout(() => head.classList.remove('bg-yellow-100'), 1800);
+                    }
+                  }}
                 />
               </div>
             )}

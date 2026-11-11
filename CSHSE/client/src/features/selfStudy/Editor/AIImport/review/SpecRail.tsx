@@ -23,6 +23,26 @@ import type {
 } from '../../../../../store/aiImportStore';
 
 export const UNPLACED_KEY = '_unplaced';
+
+/**
+ * Rail → a numbered part (4.a.2): open its spec, then bring that part's draft
+ * card (sectionId "…::part-2", split by the parser) into view and flash it.
+ */
+export function openPartCard(specKey: string, n: number, onSelect: (key: string) => void) {
+  onSelect(specKey);
+  let tries = 0;
+  const find = () => {
+    const el = document.querySelector<HTMLElement>(`[data-section-id$="::part-${n}"]`);
+    if (el) {
+      el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      el.classList.add('ring-2', 'ring-cshse-500');
+      window.setTimeout(() => el.classList.remove('ring-2', 'ring-cshse-500'), 1800);
+      return;
+    }
+    if (++tries < 20) window.setTimeout(find, 100);
+  };
+  window.setTimeout(find, 50);
+}
 export const UNWRITTEN_KEY = '_unwritten';
 export const MATRICES_KEY = '_matrices';
 // CR-033 / CR-040 — synthetic rail keys for detector outputs.
@@ -602,6 +622,7 @@ export function SpecRail({
                           standardCode={b.standardCode}
                           specCode={b.specCode}
                           surface="rail"
+                          onOpenPart={(n) => openPartCard(key, n, onSelect)}
                         />
                       )}
                     </li>
