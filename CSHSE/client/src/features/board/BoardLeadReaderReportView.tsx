@@ -179,7 +179,6 @@ export function BoardLeadReaderReportView(): JSX.Element {
         </Section>
         <Section n={6} title="Recommendations">
           <Field label="Recommendation" value={rec ? RECOMMENDATION_LABEL[rec] || rec : ''} />
-          {rec === 'conditional' && <Field label="Conditional requirements" value={f.conditionalRequirements} />}
           {rec === 'hold' && <Field label="Explanation" value={f.holdExplanation} />}
         </Section>
         <Section n={7} title="Additional Reader Recommendations not required by the Standards">

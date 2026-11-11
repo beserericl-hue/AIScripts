@@ -339,7 +339,6 @@ export class PDFGeneratorService {
 
       const recommendations = [
         { value: 'accreditation_no_conditions', label: 'Accreditation with no conditions' },
-        { value: 'conditional_accreditation', label: 'Conditional accreditation' },
         { value: 'deny_accreditation', label: 'Deny accreditation due to significant noncompliance' },
         { value: 'hold_decision', label: 'Hold a decision' }
       ];
@@ -351,13 +350,6 @@ export class PDFGeneratorService {
           .fontSize(10)
           .text(isSelected ? `☑ ${rec.label}` : `☐ ${rec.label}`);
 
-        // Show details if selected
-        if (isSelected && rec.value === 'conditional_accreditation' && review.finalAssessment.conditionDetails) {
-          this.doc
-            .font(FONTS.italic)
-            .fontSize(9)
-            .text(`   Conditions: ${review.finalAssessment.conditionDetails}`);
-        }
         if (isSelected && rec.value === 'deny_accreditation' && review.finalAssessment.denyExplanation) {
           this.doc
             .font(FONTS.italic)

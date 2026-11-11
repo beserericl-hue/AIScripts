@@ -26,7 +26,6 @@ export const LEVEL_LABEL: Record<string, string> = {
 
 export const RECOMMENDATION_LABEL: Record<string, string> = {
   accredit_no_conditions: 'Accreditation with no conditions',
-  conditional: 'Conditional accreditation',
   deny: 'Deny accreditation',
   hold: 'Hold a decision',
 };
