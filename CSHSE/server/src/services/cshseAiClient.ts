@@ -400,6 +400,17 @@ export interface XrefPlacementResult {
   passageSpec?: string | null;
   error?: string;
 }
+/** A curriculum matrix uploaded on its own → wire-format matrices (no parsing of anything else). */
+export async function extractMatrix(req: { base64: string; filename?: string; programLevel: string }): Promise<{ matrices: any[]; error?: string }> {
+  try {
+    const res = await postSigned<{ matrices: any[] }>('/ai/matrix/extract', req, 120_000);
+    if (res.status >= 400) return { matrices: [], error: String((res.body as any)?.detail || `HTTP ${res.status}`) };
+    return { matrices: Array.isArray(res.body?.matrices) ? res.body.matrices : [] };
+  } catch (err: any) {
+    return { matrices: [], error: err?.message || String(err) };
+  }
+}
+
 export async function xrefPlacement(req: {
   specs: Array<{ std: string; spec: string; prompt: string }>;
   narratives: Array<{ std: string; spec?: string; text: string }>;

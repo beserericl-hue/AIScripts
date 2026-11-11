@@ -1007,6 +1007,42 @@ class XrefPlacementRequest(BaseModel):
     files: list[dict] = Field(description="[{id, name, path, text}] — up to 25 files.")
 
 
+class MatrixExtractRequest(BaseModel):
+    """A curriculum matrix uploaded ON ITS OWN (importer kind "Curriculum
+    matrix"): extract only the matrix — no section parsing, no drafts."""
+    base64: str = Field(..., description="The .docx bytes, base64.")
+    filename: str = Field(default="")
+    programLevel: str = Field(default="bachelors")
+
+
+@app.post("/ai/matrix/extract", status_code=status.HTTP_200_OK)
+async def matrix_extract(req: MatrixExtractRequest, request: Request) -> dict:
+    body = await request.body()
+    verify_hmac_signature(request, body)
+    import base64 as _b64
+    import io as _io
+
+    import mammoth as _mammoth
+    from starlette.concurrency import run_in_threadpool
+
+    from app.matrix.template_loader import align_template_to_handbook, load_matrix_template
+    from app.matrix.wire_format import build_wire_matrices
+    from app.standards.loader import load_specifications
+
+    level = {"baccalaureate": "bachelors", "bachelor": "bachelors", "master": "masters"}.get(req.programLevel, req.programLevel)
+    try:
+        data = _b64.b64decode(req.base64)
+        html = _mammoth.convert_to_html(_io.BytesIO(data)).value.encode("utf-8")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail=f"Could not read the document as Word (.docx): {type(exc).__name__}")
+    try:
+        aligned = align_template_to_handbook(load_matrix_template(level), load_specifications(level))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=422, detail=f"No matrix template for level {level}: {exc}")
+    matrices, _ = await run_in_threadpool(build_wire_matrices, html, aligned)
+    return {"matrices": matrices, "level": level}
+
+
 @app.post("/ai/placement/xref", status_code=status.HTTP_200_OK)
 async def placement_xref(req: XrefPlacementRequest, request: Request) -> dict:
     body = await request.body()

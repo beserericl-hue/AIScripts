@@ -17,6 +17,7 @@ import * as s3Service from '../services/s3Service';
 import { DocumentVersion } from '../models/DocumentVersion';
 import { recordVersion } from '../services/documentVersionService';
 import { requireImportAccess, requireSubmissionAccess, requireCanImport } from '../services/submissionAccessGuard';
+import { extractMatrix } from '../services/cshseAiClient';
 import { AuthenticatedRequest } from '../middleware/auth';
 import fs from 'fs/promises';
 import { createReadStream } from 'fs';
@@ -275,6 +276,14 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
       typeof req.body.documentKind === 'string'
         ? req.body.documentKind.trim().toLowerCase()
         : '';
+    // "Curriculum matrix": the file IS the program's curriculum matrix (the
+    // official "Matrix Illustrating Relationship of Required Courses to
+    // Curriculum Standards" form, uploaded on its own). File it under 2.e and
+    // load its rows into the Curriculum Matrix — nothing else is parsed, so it
+    // never turns into draft narratives.
+    if (rawKind === 'matrix') {
+      return loadStandaloneMatrix(req, res, submission, importRecord, file);
+    }
     const DIRECT_KINDS = ['cv', 'syllabus', 'project'];
     if (DIRECT_KINDS.includes(rawKind)) {
       try {
@@ -3546,3 +3555,123 @@ export const finishTagging = async (req: AuthenticatedRequest, res: Response) =>
     return res.status(500).json({ error: 'Failed to finish tagging' });
   }
 };
+
+
+/**
+ * Importer kind "Curriculum matrix" — see the call site. Returns 201 with how
+ * many matrix rows / coded cells were loaded, or 422 when the document has no
+ * recognisable matrix (the file is still kept, filed under 2.e).
+ */
+async function loadStandaloneMatrix(req: any, res: Response, submission: any, importRecord: any, file: any) {
+  const uploaderId = new mongoose.Types.ObjectId(req.user?.id);
+  const level = String(submission.programLevel || req.body.programLevel || 'bachelors');
+  const isDocx = /\.docx$/i.test(file.originalname) || /wordprocessingml/.test(file.mimetype || '');
+  if (!isDocx) {
+    return res.status(422).json({ error: 'A curriculum matrix must be a Word (.docx) file. Save it as .docx and try again.' });
+  }
+  const evidence = await SupportingEvidence.create({
+    institutionId: submission.institutionId,
+    submissionId: submission._id,
+    uploadedBy: uploaderId,
+    evidenceType: 'document',
+    standardCode: '2',
+    specCode: 'e',
+    file: {
+      filename: file.originalname,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.buffer.length,
+      data: file.buffer.toString('base64'),
+      encoding: 'base64',
+      storageType: 'base64',
+      uploadedAt: new Date(),
+      uploadedBy: uploaderId,
+    } as any,
+    description: file.originalname,
+    versionNumber: 1,
+    isCurrentVersion: true,
+    isDeleted: false,
+    linkedNarratives: [],
+    tags: ['ai-import', 'direct-upload', 'kind:matrix', 'curriculum-matrix'],
+  });
+  const out = await extractMatrix({ base64: file.buffer.toString('base64'), filename: file.originalname, programLevel: level });
+  const matrices = (out.matrices || []).filter((m: any) => m?.htmlSnippet && Array.isArray(m.cells) && m.cells.length);
+  if (!matrices.length) {
+    await SelfStudyImport.findByIdAndUpdate(importRecord._id, { $set: { status: 'completed' } });
+    return res.status(422).json({
+      importId: importRecord._id,
+      evidenceId: evidence._id,
+      error: out.error
+        ? `The matrix could not be read: ${out.error}`
+        : 'No curriculum-matrix rows were recognised in this document. It was saved to your File Library under 2.e.',
+    });
+  }
+  const loaded = await applyStandaloneMatrices(submission._id, matrices, uploaderId, file.originalname);
+  await SelfStudyImport.findByIdAndUpdate(importRecord._id, { $set: { status: 'completed' } });
+  return res.status(201).json({
+    importId: importRecord._id,
+    directStored: true,
+    kind: 'matrix',
+    evidenceId: evidence._id,
+    fileName: file.originalname,
+    matrices: matrices.length,
+    rows: loaded.rows,
+    cells: loaded.cells,
+    message: `Loaded ${loaded.rows} matrix rows (${loaded.cells} coded cells) into your Curriculum Matrix and filed the document under 2.e.`,
+  });
+}
+
+/**
+ * Put standalone-matrix results where the rest of the portal reads them:
+ * Submission.aiMatrixState.matrices (Review's Matrices view + spec deep links)
+ * and the CurriculumMatrix (the editor's Curriculum Matrix view). A new upload
+ * REPLACES the previous standalone matrix of the same id; matrices that came
+ * from a self-study import are left alone.
+ */
+export async function applyStandaloneMatrices(submissionId: any, matrices: any[], userId: any, sourceName: string) {
+  const sub: any = await Submission.findById(submissionId).select('aiMatrixState submitterId');
+  const prev: any[] = Array.isArray(sub?.aiMatrixState?.matrices) ? sub.aiMatrixState.matrices : [];
+  const tagged = matrices.map((m: any) => ({ ...m, matrixId: `standalone-${m.matrixId || 'matrix'}`, name: `${m.name || 'Curriculum Matrix'} (${sourceName})`, standalone: true }));
+  const ids = new Set(tagged.map((m: any) => m.matrixId));
+  const merged = [...prev.filter((m: any) => !ids.has(m?.matrixId) && !m?.standalone), ...tagged];
+  await Submission.updateOne(
+    { _id: submissionId },
+    { $set: { 'aiMatrixState.matrices': merged, 'aiMatrixState.lastUpdatedAt': new Date() } }
+  );
+  let cm: any = await CurriculumMatrix.findOne({ submissionId });
+  const who = userId || sub?.submitterId;
+  if (!cm) {
+    cm = new CurriculumMatrix({
+      submissionId,
+      matrixType: 'human_services_courses',
+      name: 'Curriculum Matrix',
+      version: 1,
+      lastModified: new Date(),
+      lastModifiedBy: who,
+      courses: [],
+      standards: [],
+      rawContent: [],
+    });
+  }
+  if (!Array.isArray(cm.rawContent)) cm.rawContent = [];
+  // Drop earlier standalone uploads, keep anything else (e.g. a matrix pasted by hand).
+  cm.rawContent = cm.rawContent.filter((r: any) => !String(r?.id || '').startsWith('matrix-standalone-'));
+  for (const m of tagged) {
+    cm.rawContent.push({
+      id: `matrix-${m.matrixId}`,
+      content: m.htmlSnippet,
+      title: m.name,
+      addedAt: new Date(),
+      addedBy: who,
+      processed: true,
+      processedAt: new Date(),
+    });
+  }
+  cm.lastModified = new Date();
+  cm.markModified('rawContent');
+  await cm.save();
+  return {
+    rows: tagged.reduce((a: number, m: any) => a + (m.rowsMatched || 0), 0),
+    cells: tagged.reduce((a: number, m: any) => a + (m.cells?.length || 0), 0),
+  };
+}
