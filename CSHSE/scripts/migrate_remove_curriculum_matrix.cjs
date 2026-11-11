@@ -203,6 +203,9 @@ async function main() {
     const staleVr = await vr.find({ $or: [
       { standardCode: '2', specCode: 'e' },
       { feedback: MX }, { rationale: MX }, { suggestions: MX }, { missingElements: MX },
+      // The evaluator's output is stored under `result` on most records.
+      { 'result.feedback': MX }, { 'result.rationale': MX }, { 'result.suggestions': MX },
+      { 'result.missingElements': MX }, { 'result.criteriaCoverage.note': MX }, { 'result.criteriaCoverage.criterion': MX },
     ] }, { projection: { submissionId: 1, standardCode: 1, specCode: 1 } }).toArray();
     bump('AI evaluation results to clear (2.e or mentioning the matrix)', staleVr.length);
     const statusKeys = new Map(); // submissionId -> Set("std_spec")
