@@ -38,6 +38,8 @@ export function HoverTooltip({
   className,
   testId,
   coverageState,
+  width = TOOLTIP_WIDTH,
+  pinHint = 'Click the dot to keep this open.',
 }: {
   /** Multi-line tip text ('\n' honoured via whitespace-pre-line). */
   text: string;
@@ -46,7 +48,12 @@ export function HoverTooltip({
   testId?: string;
   /** Mirrored to data-coverage-state on the trigger (kept for tests/telemetry). */
   coverageState?: string;
+  /** Tooltip width in px (default 340). */
+  width?: number;
+  /** Footer hint shown while not pinned. */
+  pinHint?: string;
 }): JSX.Element {
+  const tipWidth = Math.min(width, typeof window !== 'undefined' ? window.innerWidth - 2 * EDGE : width);
   const triggerRef = useRef<HTMLSpanElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<Pos | null>(null);
@@ -60,7 +67,7 @@ export function HoverTooltip({
     if (!r) return;
     const left = Math.max(
       EDGE,
-      Math.min(r.left + r.width / 2 - TOOLTIP_WIDTH / 2, window.innerWidth - TOOLTIP_WIDTH - EDGE),
+      Math.min(r.left + r.width / 2 - tipWidth / 2, window.innerWidth - tipWidth - EDGE),
     );
     // Open on the side with more room and cap the height to it; long text
     // scrolls inside the tip instead of running off the screen.
@@ -185,7 +192,7 @@ export function HoverTooltip({
               position: 'fixed',
               top: pos.top,
               left: pos.left,
-              width: TOOLTIP_WIDTH,
+              width: tipWidth,
               maxHeight: pos.maxHeight,
               transform: pos.below ? undefined : 'translateY(-100%)',
               zIndex: 2000,
@@ -208,7 +215,7 @@ export function HoverTooltip({
             )}
             {text}
             {!pinned && (
-              <span className="mt-1.5 block text-[10px] text-gray-400">Click the dot to keep this open.</span>
+              <span className="mt-1.5 block text-[10px] text-gray-400">{pinHint}</span>
             )}
           </div>,
           document.body,

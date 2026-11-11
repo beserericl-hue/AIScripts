@@ -23,6 +23,7 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useAIImportStore } from '../../../../../store/aiImportStore';
 import { ItemCardList } from './ItemCardList';
@@ -212,15 +213,17 @@ describe('<ItemCardList />', () => {
         onBulkAction={() => {}}
       />
     );
+    // A compact chip on screen; the AI's explanation lives in its tooltip.
     const why = screen.getByTestId('spec-coverage-why');
-    expect(why).toBeInTheDocument();
-    expect(why).toHaveTextContent(/Gap/i);
-    expect(why).toHaveTextContent(/No description of the actual evaluation process/);
+    expect(why).toHaveTextContent(/Gap — 35%/);
+    expect(screen.queryByText(/No description of the actual evaluation process/)).not.toBeInTheDocument();
+    fireEvent.mouseEnter(why);
+    expect(screen.getByTestId('spec-coverage-why-tip')).toHaveTextContent(/No description of the actual evaluation process/);
     // The empty-spec "didn't route anything" message still renders too.
     expect(screen.getByText(/didn't route anything to 7\.c/)).toBeInTheDocument();
   });
 
-  it('CR-074: no coverage "why" banner for a covered (green) spec', () => {
+  it('CR-074: a covered (green) spec shows a Covered chip, no banner text on screen', () => {
     const bucket = mkBucket({
       narratives: [mkItem({ sectionId: 's1', heading: 'Good narrative' })],
       coverageScore: 0.95,
@@ -239,7 +242,8 @@ describe('<ItemCardList />', () => {
         onBulkAction={() => {}}
       />
     );
-    expect(screen.queryByTestId('spec-coverage-why')).not.toBeInTheDocument();
+    expect(screen.getByTestId('spec-coverage-why')).toHaveTextContent(/Covered — 95%/);
+    expect(screen.queryByText(/Thorough/)).not.toBeInTheDocument();
   });
 
   it('kind chip toggles fire onChangeKind with the chosen ItemKind', async () => {
