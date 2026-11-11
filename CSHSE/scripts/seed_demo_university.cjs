@@ -15,7 +15,7 @@
  *      (board@cshse.test).
  *   4. Clones Stevenson's bachelors self-study into two Demo submissions:
  *        DEMO-001  in_progress — the practice self-study the demo PC edits
- *                  (narratives, intros, review state, curriculum matrix,
+ *                  (narratives, intros, review state,
  *                  validation results, supporting-evidence records and the
  *                  import the review state points at, incl. its GridFS HTML,
  *                  copied server-side).
@@ -277,6 +277,11 @@ async function upsertUser(db, email, fields, passwordHash) {
     doc.updatedAt = now;
     delete doc.leadReader;
     delete doc.decision;
+    // The curriculum matrix was removed from the self-study (CSHSE board, Nov 2026):
+    // never carry matrix data into the practice school.
+    delete doc.aiMatrixState;
+    delete doc.curriculumMatrices;
+    for (const b of Object.values((doc.aiReviewState && doc.aiReviewState.buckets) || {})) if (b) delete b.matrixCells;
     delete doc.trainingRun;
     delete doc.reaccreditationOf;
     if (status === 'review_complete') doc.submittedAt = now;
@@ -287,11 +292,11 @@ async function upsertUser(db, email, fields, passwordHash) {
   await db.collection('submissions').insertOne(buildSub(sampleId, SAMPLE_CODE, 'review_complete'));
 
   const created = { submissions: 2 };
-  // Cloned child collections for BOTH demo submissions (evidence + matrix +
+  // Cloned child collections for BOTH demo submissions (evidence +
   // validation results); the import + its GridFS HTML for the practice one.
   for (const [target, label] of [[practiceId, PRACTICE_CODE], [sampleId, SAMPLE_CODE]]) {
     const map = { ...baseMap, [String(source._id)]: String(target) };
-    for (const c of ['curriculummatrixes', 'curriculummatrices', 'validationresults', 'supportingevidences']) {
+    for (const c of ['validationresults', 'supportingevidences']) {
       const q = { submissionId: source._id };
       if (c === 'supportingevidences') q.isDeleted = { $ne: true };
       const docs = await db.collection(c).find(q).toArray();
