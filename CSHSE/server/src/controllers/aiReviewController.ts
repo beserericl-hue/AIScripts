@@ -3059,7 +3059,8 @@ export async function aiPlaceUnassignedEvidence(req: AuthenticatedRequest, res: 
 export async function acceptAiPlacements(req: AuthenticatedRequest, res: Response): Promise<void> {
   const submission = await _loadOwnedSubmission(req, res);
   if (!submission) return;
-  const { evidenceIds, minConfidence } = (req.body || {}) as { evidenceIds?: string[]; minConfidence?: number };
+  // `all: true` = "Use Recommended": every AI-recommended placement, whatever its confidence.
+  const { evidenceIds, minConfidence, all } = (req.body || {}) as { evidenceIds?: string[]; minConfidence?: number; all?: boolean };
   const min = typeof minConfidence === 'number' ? minConfidence : 0.75;
   const q: any = {
     submissionId: submission._id,
@@ -3070,7 +3071,7 @@ export async function acceptAiPlacements(req: AuthenticatedRequest, res: Respons
     'metadata.aiPlacement.standardCode': { $nin: [null, ''] },
   };
   if (Array.isArray(evidenceIds) && evidenceIds.length) q._id = { $in: evidenceIds.filter((x) => mongoose.Types.ObjectId.isValid(x)) };
-  else q['metadata.aiPlacement.confidence'] = { $gte: min };
+  else if (all !== true) q['metadata.aiPlacement.confidence'] = { $gte: min };
   const evs: any[] = await SupportingEvidence.find(q);
   const state = (submission as any).aiReviewState;
   const docs: any[] = Array.isArray(state?.evidenceDocs) ? state.evidenceDocs : [];

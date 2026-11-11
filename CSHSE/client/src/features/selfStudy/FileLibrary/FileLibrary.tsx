@@ -443,8 +443,9 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
       setAiPlacing(false);
     }
   };
+  const [useRecStatus, setUseRecStatus] = useState<string | null>(null);
   const acceptAiMutation = useMutation({
-    mutationFn: async (v: { evidenceIds?: string[]; minConfidence?: number }) => {
+    mutationFn: async (v: { evidenceIds?: string[]; minConfidence?: number; all?: boolean }) => {
       const res = await api.post(`${API_BASE}/submissions/${submissionId}/evidence/accept-ai-placements`, v);
       return res.data as { accepted: number };
     },
@@ -946,11 +947,27 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
     const unassignedFiles = Object.values(evidenceByStandard['unassigned'] || {}).flat();
     if (unassignedFiles.length === 0) return null;
     const isExpanded = expandedStandards.has('unassigned');
+    // Files the AI recommended a Standard (+ specification) for — "Use Recommended"
+    // files every one of them there in one go (working material has no
+    // recommendation, so it stays here).
+    const recommended = unassignedFiles.filter(
+      (f: Evidence) => f.metadata?.aiPlacement?.kind === 'evidence' && !!f.metadata?.aiPlacement?.standardCode
+    );
+    const useRecommended = () => {
+      const n = recommended.length;
+      if (!n) return;
+      if (!window.confirm(`Move ${n} file${n === 1 ? '' : 's'} to the Standard and specification the AI recommends for each?\n\nYou can still change any of them afterwards with “Assign to Standard”.`)) return;
+      acceptAiMutation.mutate(
+        { all: true },
+        { onSuccess: (d) => setUseRecStatus(`Moved ${d?.accepted ?? 0} file${d?.accepted === 1 ? '' : 's'} to their recommended Standards.`) }
+      );
+    };
     return (
       <div key="unassigned" className="border border-amber-200 rounded-lg overflow-hidden" data-testid="file-library-unassigned">
+        <div className="flex items-center bg-amber-50/40">
         <button
           onClick={() => toggleStandard('unassigned')}
-          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-amber-50 transition-colors whitespace-nowrap bg-amber-50/40"
+          className="flex-1 min-w-0 flex items-center gap-3 px-4 py-3 text-left hover:bg-amber-50 transition-colors whitespace-nowrap"
         >
           {isExpanded ? (
             <ChevronDown className="w-4 h-4 text-amber-600 flex-shrink-0" />
@@ -961,10 +978,27 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
           <span className="text-sm text-amber-700/80 truncate flex-1">
             Imported files awaiting a Standard — use “Assign to Standard” on each
           </span>
-          <span className="flex-shrink-0 text-xs px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full whitespace-nowrap">
+        </button>
+          {useRecStatus && (
+            <span className="flex-shrink-0 px-2 text-xs text-emerald-700" data-testid="use-recommended-status">{useRecStatus}</span>
+          )}
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={useRecommended}
+              disabled={acceptAiMutation.isPending || recommended.length === 0}
+              data-testid="use-recommended"
+              title="Move every unassigned file to the Standard and specification the AI recommends for it"
+              className="flex-shrink-0 mr-2 flex items-center gap-1 rounded border border-purple-300 bg-white px-2.5 py-1 text-xs font-medium text-purple-800 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {acceptAiMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              Use Recommended ({recommended.length})
+            </button>
+          )}
+          <span className="flex-shrink-0 mr-4 text-xs px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full whitespace-nowrap">
             {unassignedFiles.length} file{unassignedFiles.length !== 1 ? 's' : ''}
           </span>
-        </button>
+        </div>
         {isExpanded && (
           <div className="px-4 pb-4 pt-3 border-t border-amber-100">
             {!readOnly && (() => {
