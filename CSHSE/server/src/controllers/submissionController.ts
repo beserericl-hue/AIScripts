@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { Submission, ISubmission } from '../models/Submission';
 import { Institution } from '../models/Institution';
 // CR-060 — multi-role access: role-by-institution resolution.
-import { hasRoleAt, isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
+import { hasRoleAt, isGlobalAdmin, institutionIdsWithRole, isBoardSession } from '../services/roleResolver';
 import { requireSubmissionAccess, requireCanImport } from '../services/submissionAccessGuard';
 import { ValidationResult } from '../models/ValidationResult';
 import { Comment } from '../models/Comment';
@@ -1660,6 +1660,9 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
         or.push(clause);
       }
 
+      // CSHSE Board session — never lists self-studies (board reads completed
+      // Lead Reader Reports only, via /api/board/lead-reader-reports).
+      if (isBoardSession(req.user as any)) or.length = 0;
       if (or.length === 0) {
         filter._id = new mongoose.Types.ObjectId(); // no PC/reviewer role → see nothing
       } else if (or.length === 1) {

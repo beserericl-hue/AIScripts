@@ -60,6 +60,7 @@ import evidenceRecommendationsRouter from './routes/evidenceRecommendations';
 import itineraryRouter from './routes/itinerary';
 // CR-053 / Sprint 7.1 — Board decisions + cycle scheduler.
 import boardDecisionsRouter from './routes/boardDecisions';
+import boardReportsRouter from './routes/boardReports';
 // CR-016 / Sprint 7.2 — In-app bug reporter.
 import bugReportsRouter from './routes/bugReports';
 // CR-020 / Sprint 7.3 — Admin audit-trail.
@@ -216,6 +217,7 @@ app.use('/api', directMessagesRouter);
 app.use('/api', checklistRouter);
 app.use('/api', evidenceRecommendationsRouter);
 app.use('/api', itineraryRouter);
+app.use('/api/board', boardReportsRouter);
 app.use('/api', boardDecisionsRouter);
 app.use('/api', bugReportsRouter);
 app.use('/api', auditTrailRouter);

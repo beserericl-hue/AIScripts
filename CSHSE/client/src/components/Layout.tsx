@@ -177,7 +177,9 @@ export default function Layout() {
   const isReaderRole = effectiveRole === 'reader' || effectiveRole === 'lead_reader';
   const isAdminLikeRole = effectiveRole === 'admin' || isCurrentlySuperuser;
   const isLeadOrAdmin = effectiveRole === 'lead_reader' || isAdminLikeRole;
-  if (!isReaderRole || isAdminLikeRole) {
+  // CSHSE Board — read-only; Home (the completed Lead Reader Reports list) only.
+  const isBoardRole = effectiveRole === 'board' && !isCurrentlySuperuser;
+  if (!isBoardRole && (!isReaderRole || isAdminLikeRole)) {
     navigation.push({ name: 'Self-Study', href: '/self-study', icon: DocumentIcon, tourStep: 'self-study' });
   }
   // CR-074 — readers + lead readers no longer get a separate "Review queue"
@@ -336,7 +338,7 @@ export default function Layout() {
                 <RoleSwitcher />
               ) : (
                 <span className={`user-role-badge ${isCurrentlySuperuser ? 'bg-purple-100 text-purple-700' : ''}`}>
-                  {isCurrentlySuperuser ? 'Superuser' : displayRole?.replace('_', ' ')}
+                  {isCurrentlySuperuser ? 'Superuser' : displayRole === 'board' ? 'Board · CSHSE' : displayRole?.replace('_', ' ')}
                 </span>
               )}
               {/* Switch Role button for superusers not currently impersonating */}

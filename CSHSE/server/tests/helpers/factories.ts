@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { User } from '../../src/models/User';
 import { Assignment } from '../../src/models/Assignment';
 
-type Role = 'admin' | 'program_coordinator' | 'lead_reader' | 'reader';
+type Role = 'admin' | 'program_coordinator' | 'lead_reader' | 'reader' | 'board';
 
 interface UserOverrides {
   email?: string;

@@ -53,7 +53,14 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response) => {
     // to enumerate admin/superuser accounts. Now a client filter may only
     // NARROW within the already-computed scope.
     if (status) query.status = status;
-    if (role) {
+    if (role === 'board') {
+      // Board members: primary-role board OR the board flag on a multi-role user.
+      // Only global admins reach here with an unscoped query.
+      if (query.role?.$in || query.institutionId) {
+        return res.json({ users: [], total: 0, page: parseInt(page as string, 10) || 1, pages: 0 });
+      }
+      query.$or = [{ role: 'board' }, { isBoardMember: true }];
+    } else if (role) {
       if (query.role?.$in && !query.role.$in.includes(role)) {
         return res.json({ users: [], total: 0, page: parseInt(page as string, 10) || 1, pages: 0 });
       }
@@ -479,6 +486,9 @@ export const setUserRoleAssignments = async (req: AuthenticatedRequest, res: Res
       return res.status(403).json({ error: 'Admin access required' });
     }
     const input = Array.isArray(req.body?.roleAssignments) ? req.body.roleAssignments : [];
+    // Optional — CSHSE Board membership (global, read-only). Absent = unchanged.
+    const boardFlag: boolean | undefined =
+      typeof req.body?.isBoardMember === 'boolean' ? req.body.isBoardMember : undefined;
     const { ok, error, normalized } = validateRoleAssignments(input);
     if (!ok) return res.status(400).json({ error });
 
@@ -504,9 +514,18 @@ export const setUserRoleAssignments = async (req: AuthenticatedRequest, res: Res
       institutionName: nameById.get(String(a.institutionId))
     })) as any;
 
+    if (boardFlag !== undefined) user.isBoardMember = boardFlag;
+    const holdsBoard = user.isBoardMember === true || (boardFlag === undefined && user.role === 'board');
+    if (holdsBoard) user.isBoardMember = true;
+
     // Refresh the derived primary so legacy role/institutionId reads stay valid.
     const primary = derivePrimary(user.roleAssignments as any);
-    if (primary) {
+    if (!primary && holdsBoard) {
+      // Board-only user — the primary role IS board (CSHSE-wide, no institution).
+      user.role = 'board';
+      user.institutionId = undefined as any;
+      user.institutionName = undefined as any;
+    } else if (primary) {
       user.role = primary.role as any;
       user.institutionId = primary.institutionId;
       user.institutionName = primary.institutionName;
@@ -518,6 +537,8 @@ export const setUserRoleAssignments = async (req: AuthenticatedRequest, res: Res
       // nothing. Clearing institutionId drops the user out of every roster.
       user.institutionId = undefined as any;
       user.institutionName = undefined as any;
+      // Board membership removed and nothing else held — drop the board role.
+      if (user.role === 'board') user.role = 'reader';
     }
     user.markModified('roleAssignments');
     await user.save();
@@ -580,7 +601,8 @@ export const setUserRoleAssignments = async (req: AuthenticatedRequest, res: Res
         id: user._id,
         role: user.role,
         institutionId: user.institutionId,
-        roleAssignments: user.roleAssignments
+        roleAssignments: user.roleAssignments,
+        isBoardMember: user.isBoardMember === true || user.role === 'board'
       }
     });
   } catch (error) {

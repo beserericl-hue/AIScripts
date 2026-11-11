@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
 import { runWithRequestContext, ImpersonationContext } from './requestContext';
-import { resolveActiveContext, isGlobalAdmin } from '../services/roleResolver';
+import { resolveActiveContext, isGlobalAdmin, BOARD_ROLE } from '../services/roleResolver';
 
 /**
  * Extended Request interface with user information from JWT
@@ -25,6 +25,8 @@ export interface AuthenticatedRequest extends Request {
     // EFFECTIVE elevation: false while impersonating a non-admin role, so all
     // access checks treat the impersonated session as that role.
     isSuperuser?: boolean;
+    // CSHSE Board membership held by the effective identity (see roleResolver).
+    isBoardMember?: boolean;
     // The TRUE underlying superuser flag (unaffected by impersonation) for the
     // rare feature that must know the real actor is a superuser.
     realIsSuperuser?: boolean;
@@ -57,6 +59,42 @@ export function applyActiveContext(req: AuthenticatedRequest, roleOnlyImpersonat
   req.user.role = ctx.role;
   req.user.institutionId = ctx.institutionId;
   req.user.activeContext = ctx;
+}
+
+/**
+ * A BOARD session is CSHSE-wide and read-only: strip every institution-scoped
+ * capability so a board member who is ALSO a reader / PC somewhere cannot use
+ * those assignments while acting as the board (the guard in
+ * submissionAccessGuard additionally refuses every board session). The board
+ * reaches data only through routes/boardReports.ts.
+ */
+export function narrowBoardSession(req: AuthenticatedRequest): void {
+  if (!req.user || req.user.role !== BOARD_ROLE) return;
+  req.user.institutionId = undefined;
+  req.user.roleAssignments = [];
+}
+
+/**
+ * DEFAULT-DENY for board sessions. The board is read-only and may reach ONLY
+ * the completed Lead Reader Reports plus the session plumbing every signed-in
+ * page needs (own profile / preferences, own notifications, bug report, help
+ * chat). Every other authenticated API route answers 403 for a board session —
+ * so a future route can never be opened to the board by accident, and a board
+ * member's own reader / PC assignments are unusable while acting as board.
+ */
+const BOARD_ALLOWED_PREFIXES = [
+  '/api/board/lead-reader-reports',
+  '/api/auth/',
+  '/api/notifications',
+  '/api/bug-reports',
+  '/api/webhooks/help/',
+];
+export function boardPathAllowed(url: string): boolean {
+  const path = String(url || '').split('?')[0];
+  return BOARD_ALLOWED_PREFIXES.some((p) => {
+    const base = p.replace(/\/$/, '');
+    return path === base || path.startsWith(`${base}/`);
+  });
 }
 
 /** Decode a header value the client URI-encoded (names may contain spaces/unicode). */
@@ -99,7 +137,7 @@ export const authenticate = async (
 
       // Get full user info from database
       const user = await User.findById(decoded.id).select(
-        'email role firstName lastName institutionId isSuperuser roleAssignments'
+        'email role firstName lastName institutionId isSuperuser isBoardMember roleAssignments'
       );
 
       if (!user) {
@@ -138,7 +176,7 @@ export const authenticate = async (
       if (isImpersonating && impersonatedUserId) {
         try {
           const target = await User.findById(impersonatedUserId).select(
-            'email role firstName lastName institutionId isSuperuser roleAssignments'
+            'email role firstName lastName institutionId isSuperuser isBoardMember roleAssignments'
           );
           if (target) identityUser = target;
         } catch { /* invalid id — fall back to role-only impersonation below */ }
@@ -193,10 +231,17 @@ export const authenticate = async (
           institutionName: a.institutionName
         })),
         isSuperuser: effectiveIsSuperuser,
+        isBoardMember: (identityUser as any).isBoardMember === true,
         realIsSuperuser: user.isSuperuser,
         impersonation
       };
       applyActiveContext(req, isImpersonating && !assumedSpecificUser);
+      narrowBoardSession(req);
+      if (req.user.role === BOARD_ROLE && !boardPathAllowed(req.originalUrl)) {
+        return res.status(403).json({
+          error: 'CSHSE Board members have read-only access to completed Lead Reader Reports only.',
+        });
+      }
 
       // CR-058 — bind the impersonation context for the request's async
       // lifetime so `recordAuditEvent` auto-flags every governance action
@@ -237,7 +282,7 @@ export const optionalAuth = async (
       const decoded = jwt.verify(token, jwtSecret) as JWTPayload;
 
       const user = await User.findById(decoded.id).select(
-        'email role firstName lastName institutionId isSuperuser roleAssignments'
+        'email role firstName lastName institutionId isSuperuser isBoardMember roleAssignments'
       );
 
       if (user) {
@@ -255,9 +300,11 @@ export const optionalAuth = async (
             institutionId: a.institutionId?.toString?.() || String(a.institutionId),
             institutionName: a.institutionName
           })),
-          isSuperuser: user.isSuperuser
+          isSuperuser: user.isSuperuser,
+          isBoardMember: (user as any).isBoardMember === true
         };
         applyActiveContext(req, false);
+        narrowBoardSession(req);
       }
     } catch {
       // Token invalid - continue without authentication

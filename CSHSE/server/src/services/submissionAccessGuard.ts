@@ -24,7 +24,7 @@ import { Response } from 'express';
 import { Submission } from '../models/Submission';
 import { Assignment } from '../models/Assignment';
 import { SelfStudyImport } from '../models/SelfStudyImport';
-import { isGlobalAdmin, hasRoleAt } from './roleResolver';
+import { isGlobalAdmin, hasRoleAt, isBoardSession } from './roleResolver';
 import { AuthenticatedRequest } from '../middleware/auth';
 
 export interface SubmissionAccessResult {
@@ -56,6 +56,10 @@ export async function canAccessSubmission(
   }
 
   if (isGlobalAdmin(req.user)) return { ok: true, submission };
+
+  // CSHSE Board sessions are read-only and reach ONLY completed Lead Reader
+  // Reports via routes/boardReports.ts — never any submission-scoped route.
+  if (isBoardSession(req.user)) return { ok: false, reason: 'forbidden', submission };
 
   const instId = submission.institutionId ? submission.institutionId.toString() : null;
   const isSubmitter = String(submission.submitterId || '') === String(req.user?.id || '');

@@ -38,6 +38,8 @@ interface User {
   institutionId?: string;
   institutionName?: string;
   isSuperuser?: boolean;
+  // CSHSE Board member (read-only access to completed Lead Reader Reports).
+  isBoardMember?: boolean;
   // How the account signs in: 'both' (MemberClick or the password UI) or
   // 'memberclick-only' (MemberClick SSO only — no password).
   loginMethod?: 'both' | 'memberclick-only';
@@ -63,14 +65,16 @@ const roleLabels: Record<string, string> = {
   admin: 'Administrator',
   lead_reader: 'Lead Reader',
   reader: 'Reader',
-  program_coordinator: 'Program Coordinator'
+  program_coordinator: 'Program Coordinator',
+  board: 'Board'
 };
 
 const roleColors: Record<string, string> = {
   admin: 'bg-purple-100 text-purple-800',
   lead_reader: 'bg-blue-100 text-blue-800',
   reader: 'bg-green-100 text-green-800',
-  program_coordinator: 'bg-teal-100 text-teal-800'
+  program_coordinator: 'bg-teal-100 text-teal-800',
+  board: 'bg-amber-100 text-amber-800'
 };
 
 const statusIcons: Record<string, React.ReactNode> = {
@@ -102,6 +106,8 @@ export function UserManagement() {
   // CR-074 — the edit-user modal now also edits the login EMAIL (must match
   // MemberClick SSO). Saved together with the roles.
   const [emailDraft, setEmailDraft] = useState('');
+  // CSHSE Board membership (global, read-only) — edited in the same modal.
+  const [boardDraft, setBoardDraft] = useState(false);
   const [savingEdits, setSavingEdits] = useState(false);
 
   // Fetch users
@@ -312,11 +318,12 @@ export function UserManagement() {
     const seed: RoleAssignment[] =
       user.roleAssignments && user.roleAssignments.length > 0
         ? user.roleAssignments.map((a) => ({ ...a }))
-        : (user.institutionId && user.role !== 'admin'
+        : (user.institutionId && user.role !== 'admin' && user.role !== 'board'
             ? [{ role: user.role as RoleAssignment['role'], institutionId: user.institutionId, institutionName: user.institutionName }]
             : []);
     setRoleUser(user);
     setRoleDraft(seed);
+    setBoardDraft(user.isBoardMember === true || user.role === 'board');
     setEmailDraft(user.email || '');
   };
 
@@ -331,7 +338,7 @@ export function UserManagement() {
       if (newEmail && newEmail !== (roleUser.email || '').toLowerCase()) {
         await api.put(`/api/users/${roleUser._id}`, { email: newEmail });
       }
-      await api.put(`/api/users/${roleUser._id}/role-assignments`, { roleAssignments: roleDraft });
+      await api.put(`/api/users/${roleUser._id}/role-assignments`, { roleAssignments: roleDraft, isBoardMember: boardDraft });
       queryClient.invalidateQueries({ queryKey: ['users'] });
       queryClient.invalidateQueries({ queryKey: ['institutions'] });
       setRoleUser(null);
@@ -553,6 +560,7 @@ export function UserManagement() {
               <option value="lead_reader">Lead Readers</option>
               <option value="reader">Readers</option>
               <option value="program_coordinator">Program Coordinators</option>
+              <option value="board">Board</option>
             </select>
           </div>
         )}
@@ -606,6 +614,8 @@ export function UserManagement() {
                       <div className="flex max-w-md flex-wrap items-center justify-end gap-1.5">
                         {user.role === 'admin' || user.isSuperuser ? (
                           <span className={`px-2 py-1 text-xs rounded-full ${roleColors['admin']}`}>{roleLabels['admin']}</span>
+                        ) : user.role === 'board' && !(user.roleAssignments && user.roleAssignments.length > 0) ? (
+                          <span className={`px-2 py-1 text-xs rounded-full ${roleColors['board']}`}>Board · CSHSE</span>
                         ) : user.roleAssignments && user.roleAssignments.length > 0 ? (
                           user.roleAssignments.map((a, i) => (
                             <span
@@ -620,6 +630,9 @@ export function UserManagement() {
                           <span className={`px-2 py-1 text-xs rounded-full ${roleColors[user.role]}`}>
                             {roleLabels[user.role]}{user.institutionName ? ` · ${user.institutionName}` : ''}
                           </span>
+                        )}
+                        {user.isBoardMember && user.role !== 'board' && !(user.role === 'admin' || user.isSuperuser) && (
+                          <span className={`px-2 py-0.5 text-xs rounded-full ${roleColors['board']}`} data-testid="user-board-chip">Board · CSHSE</span>
                         )}
                       </div>
                       <span className="whitespace-nowrap text-sm text-gray-400">
@@ -826,6 +839,7 @@ export function UserManagement() {
                   <option value="reader">Reader</option>
                   <option value="lead_reader">Lead Reader</option>
                   <option value="program_coordinator">Program Coordinator</option>
+                  <option value="board">CSHSE Board (read-only Lead Reader Reports)</option>
                   <option value="admin">Administrator</option>
                 </select>
               </div>
@@ -922,6 +936,26 @@ export function UserManagement() {
                     className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
                     placeholder="name@example.com"
                   />
+                </div>
+
+                {/* CSHSE Board — global, read-only access to completed Lead Reader Reports. */}
+                <div className="border-t border-gray-100 pt-3">
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      data-testid="edit-user-board"
+                      checked={boardDraft}
+                      onChange={(e) => setBoardDraft(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                    />
+                    <span>
+                      <span className="font-semibold">CSHSE Board member</span>
+                      <span className="block text-gray-500">
+                        Read-only access to every completed Lead Reader Report (all institutions) and their Word / PDF
+                        downloads. Appears as “Board · CSHSE” in the user’s role switcher.
+                      </span>
+                    </span>
+                  </label>
                 </div>
 
                 <div className="border-t border-gray-100 pt-3">
