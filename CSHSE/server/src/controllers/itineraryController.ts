@@ -142,6 +142,12 @@ export const getItinerary = async (req: AuthenticatedRequest, res: Response) => 
     const submission = await Submission.findById(submissionId).lean();
     if (!submission) return res.status(404).json({ error: 'Submission not found' });
     const siteVisit = await _findActiveSiteVisit(submissionId);
+    // No visit yet: anyone who passed the submission access gate above (the
+    // assigned lead / readers, the PC, admins) gets the "No site visit
+    // scheduled" state — not a 403. Unrelated users never get this far.
+    if (!siteVisit) {
+      return res.json({ submissionId, siteVisit: null, canCoEdit: false });
+    }
     if (!_canRead(req, submission, siteVisit)) {
       return res.status(403).json({ error: 'Not authorized to view this itinerary' });
     }

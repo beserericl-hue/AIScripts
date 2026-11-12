@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
+import { institutionSelfStudyPath } from './institutionSelfStudyPath';
 import {
   LayoutDashboard,
   Bell,
@@ -23,13 +24,15 @@ import {
   Download,
   FolderOpen,
 } from 'lucide-react';
-import { format, formatDistanceToNow, isWithinInterval, addDays } from 'date-fns';
+import { format, formatDistanceToNow, isWithinInterval, addDays, startOfDay } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { JointVentureBadge } from '../../components/JointVentureBadge';
 import { WorkflowSummary, type WorkflowSummaryData } from './WorkflowSummary';
 import { ReaderSelfStudyPanel } from './ReaderSelfStudyPanel';
 import RequiredDocuments from '../../components/RequiredDocuments';
+import { dateOnly } from '../../lib/dateOnly';
+import { SiteVisitLinks, siteVisitSubmissionId } from '../siteVisit/SiteVisitLinks';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -116,6 +119,8 @@ interface DashboardFilters {
   readerId: string;
   search: string;
 }
+
+const VISITS_SHOWN = 5;
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -404,6 +409,9 @@ export function Dashboard() {
   // workflow-summary endpoint (server-side rollup); the old client-side
   // pcStats useMemo was removed with the stat-card rewrite.
 
+  // Upcoming Site Visits card: first few, with a View all toggle.
+  const [showAllVisits, setShowAllVisits] = useState(false);
+
   // Calculate statistics for Admin/other roles
   const stats = useMemo(() => {
     const upcomingDeadlines = filteredInstitutions.filter((inst) => {
@@ -416,9 +424,10 @@ export function Dashboard() {
     }).length;
 
     const upcomingSiteVisits = siteVisits.filter((sv) => {
-      const visitDate = new Date(sv.scheduledDate);
+      const visitDate = dateOnly(sv.scheduledDate);
+      // A visit later today still counts as upcoming.
       return isWithinInterval(visitDate, {
-        start: new Date(),
+        start: startOfDay(new Date()),
         end: addDays(new Date(), 14),
       });
     }).length;
@@ -430,6 +439,11 @@ export function Dashboard() {
       upcomingSiteVisits,
     };
   }, [filteredInstitutions, filteredChangeRequests, siteVisits]);
+
+  // Deadlines table "eye": open the institution's most recent self-study.
+  const openInstitutionSelfStudy = async (institutionId: string) => {
+    navigate(await institutionSelfStudyPath(institutionId));
+  };
 
   const leadReaders = users.filter((u) => u.role === 'lead_reader');
   const readers = users.filter((u) => u.role === 'reader');
@@ -687,7 +701,7 @@ export function Dashboard() {
                         <div className="flex items-start justify-between">
                           <div>
                             <p className="font-medium text-gray-900">
-                              {format(new Date(sv.scheduledDate), 'EEEE, MMMM d, yyyy')}
+                              {format(dateOnly(sv.scheduledDate), 'EEEE, MMMM d, yyyy')}
                             </p>
                             {sv.teamMembers && sv.teamMembers.length > 0 && (
                               <div className="flex items-center gap-1 mt-2">
@@ -697,6 +711,7 @@ export function Dashboard() {
                                 </span>
                               </div>
                             )}
+                            <SiteVisitLinks submissionId={siteVisitSubmissionId(sv.submissionId)} role={effectiveRole} compact className="mt-2" />
                           </div>
                           <span className={`px-2 py-0.5 text-xs font-medium rounded ${
                             sv.status === 'confirmed'
@@ -1038,7 +1053,7 @@ export function Dashboard() {
                     <p>No upcoming site visits</p>
                   </div>
                 ) : (
-                  siteVisits.map((sv) => (
+                  (showAllVisits ? siteVisits : siteVisits.slice(0, VISITS_SHOWN)).map((sv) => (
                     <div
                       key={sv._id}
                       className="p-4 hover:bg-gray-50 cursor-pointer"
@@ -1050,7 +1065,7 @@ export function Dashboard() {
                           </p>
                           <p className="text-sm text-gray-500 mt-1">
                             {format(
-                              new Date(sv.scheduledDate),
+                              dateOnly(sv.scheduledDate),
                               'EEEE, MMMM d, yyyy'
                             )}
                           </p>
@@ -1062,6 +1077,7 @@ export function Dashboard() {
                               </span>
                             </div>
                           )}
+                          <SiteVisitLinks submissionId={siteVisitSubmissionId(sv.submissionId)} role={effectiveRole} compact className="mt-2" />
                         </div>
                         <div className="flex flex-col items-end">
                           <span
@@ -1078,7 +1094,7 @@ export function Dashboard() {
                             {sv.status}
                           </span>
                           <span className="text-xs text-gray-400 mt-2">
-                            {formatDistanceToNow(new Date(sv.scheduledDate), {
+                            {formatDistanceToNow(dateOnly(sv.scheduledDate), {
                               addSuffix: true,
                             })}
                           </span>
@@ -1088,10 +1104,15 @@ export function Dashboard() {
                   ))
                 )}
               </div>
-              {siteVisits.length > 0 && (
+              {siteVisits.length > VISITS_SHOWN && (
                 <div className="p-4 border-t border-gray-200">
-                  <button className="w-full text-sm text-primary-600 hover:text-primary-700">
-                    View all site visits
+                  <button
+                    type="button"
+                    data-testid="site-visits-toggle"
+                    onClick={() => setShowAllVisits((v) => !v)}
+                    className="w-full text-sm text-primary-600 hover:text-primary-700"
+                  >
+                    {showAllVisits ? 'Show fewer' : `View all site visits (${siteVisits.length})`}
                   </button>
                 </div>
               )}
@@ -1140,7 +1161,7 @@ export function Dashboard() {
             </div>
 
             {/* Institutions with Upcoming Deadlines */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2 min-w-0" data-testid="deadlines-card">
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <div className="flex items-center gap-2">
                   <Clock className="w-5 h-5 text-red-500" />
@@ -1150,25 +1171,25 @@ export function Dashboard() {
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full table-auto" data-testid="deadlines-table">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Institution
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Type
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Deadline
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Lead Reader
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Readers
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Actions
                       </th>
                     </tr>
@@ -1192,17 +1213,17 @@ export function Dashboard() {
 
                         return (
                           <tr key={inst._id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-4 py-4 max-w-xs whitespace-normal">
                               <p className="font-medium text-gray-900">
                                 {inst.name}
                               </p>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-4 py-4 whitespace-nowrap">
                               <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
                                 {inst.type.replace('_', ' ')}
                               </span>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-4 py-4 whitespace-nowrap">
                               <div className="flex items-center gap-2">
                                 <span
                                   className={`font-medium ${
@@ -1225,7 +1246,7 @@ export function Dashboard() {
                                   : 'Past due'}
                               </p>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-4 py-4 whitespace-nowrap">
                               {inst.assignedLeadReaderId ? (
                                 <span className="text-sm text-gray-900">
                                   {inst.assignedLeadReaderId.firstName}{' '}
@@ -1237,7 +1258,7 @@ export function Dashboard() {
                                 </span>
                               )}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-4 py-4 min-w-[10rem] max-w-xs whitespace-normal break-words">
                               {inst.assignedReaderIds &&
                               inst.assignedReaderIds.length > 0 ? (
                                 <span className="text-sm text-gray-900">
@@ -1251,8 +1272,15 @@ export function Dashboard() {
                                 </span>
                               )}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <button className="text-primary-600 hover:text-primary-700">
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <button
+                                type="button"
+                                data-testid={`deadline-open-${inst._id}`}
+                                title={`Open ${inst.name}'s self-study`}
+                                aria-label={`Open ${inst.name}'s self-study`}
+                                onClick={() => openInstitutionSelfStudy(inst._id)}
+                                className="text-primary-600 hover:text-primary-700"
+                              >
                                 <Eye className="w-4 h-4" />
                               </button>
                             </td>

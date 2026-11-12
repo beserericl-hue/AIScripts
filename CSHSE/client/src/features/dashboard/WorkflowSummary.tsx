@@ -1,4 +1,5 @@
 import React from 'react';
+import { notReadyReasons } from '../../lib/submitReadiness';
 import {
   FileText,
   Upload,
@@ -53,6 +54,8 @@ export interface WorkflowSummaryData {
     validated: number;
     total: number;
     ready: boolean;
+    partsOpen?: number;
+    unassignedFiles?: number;
   };
 }
 
@@ -414,6 +417,14 @@ export function WorkflowSummary({
                 <span className={submit?.ready ? 'text-green-600 font-medium' : 'text-amber-600'}>
                   {submit?.ready ? 'Ready to submit' : 'Not ready to submit'}
                 </span>
+                {!submit?.ready && submit && (
+                  <span className="block text-xs text-gray-500" data-testid="dashboard-submit-reasons">
+                    {notReadyReasons(
+                      { total: submit.total, validated: submit.validated, partsOpen: submit.partsOpen ?? 0 },
+                      submit.unassignedFiles ?? 0
+                    ).join(' · ')}
+                  </span>
+                )}
               </span>
             </div>
             <button

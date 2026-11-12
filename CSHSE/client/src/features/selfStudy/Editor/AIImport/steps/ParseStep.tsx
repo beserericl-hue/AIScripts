@@ -46,10 +46,20 @@ const STAGE_LABELS: Record<string, string> = {
   mcc_subspec_match: 'Placing narratives on specs (pass 2)',
   mcc_appendix_files: 'Storing appendix files (S3)',
   mcc_reference_pass: 'Linking references (pass 3)',
+  template_walker: 'Reading the official template',
+  evidence_split: 'Separating narrative from evidence',
+  cv_detector: 'Finding faculty CVs',
+  evidence_doc_detector: 'Finding appendix documents',
+  introduction_detector: 'Finding introductions',
+  coverage_verifier: 'Checking nothing was missed',
 };
 
-function stageLabel(name: string): string {
-  return STAGE_LABELS[name] ?? name;
+/** Plain-English stage name; an unknown technical name is still made readable
+ *  ("some_new_stage" → "Some new stage") rather than shown raw. */
+export function stageLabel(name: string): string {
+  if (STAGE_LABELS[name]) return STAGE_LABELS[name];
+  const words = String(name || '').replace(/[_-]+/g, ' ').trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : name;
 }
 
 function fmtMinutes(seconds: number | null): string {

@@ -19,8 +19,11 @@ import { User } from '../models/User';
  * institution's standing lead-reader + reader roster. It is idempotent
  * (re-running refreshes, never duplicates) and used at submit time so the
  * assigned readers see the study the moment it lands. Explicit re-assignment
- * via assignReaders still owns status transitions (readers_assigned); this
- * helper only guarantees visibility and does NOT change submission.status.
+ * via assignReaders also owns status transitions. One transition happens here:
+ * a study still at 'submitted' that now has assigned reviewers advances to
+ * 'readers_assigned' — otherwise every queue kept saying "Submitted — awaiting
+ * assignment" although the readers were already assigned (AACC). Later
+ * statuses are never touched.
  *
  * Returns the User docs that now have an active assignment (for notification).
  */
@@ -98,6 +101,9 @@ export async function ensureInstitutionReaderAssignments(
   // commentController, readerLockController, siteVisitController) also pass.
   submission.assignedReaders = readerUsers.map((u) => u._id as mongoose.Types.ObjectId);
   if (leadUser) submission.leadReader = leadUser._id as mongoose.Types.ObjectId;
+  if (submission.status === 'submitted' && assignedUsers.length > 0) {
+    submission.status = 'readers_assigned';
+  }
 
   return { lead: leadUser, readers: readerUsers, assignedUsers };
 }

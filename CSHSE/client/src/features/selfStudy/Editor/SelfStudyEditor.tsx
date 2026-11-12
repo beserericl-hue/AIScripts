@@ -51,6 +51,7 @@ import { Wizard as AIImportWizard } from './AIImport';
 import { useAIImportStore } from '../../../store/aiImportStore';
 import { useAuthStore } from '../../../store/authStore';
 import { PhaseIndicator } from './PhaseIndicator';
+import { computeSpecGate, notReadyReasons } from '../../../lib/submitReadiness';
 import { useHelpScreen } from '../../../lib/helpScreens';
 
 // Use consistent API paths without relying on environment variable
@@ -437,6 +438,21 @@ function ReviewSurfaceButton({
 // state) or discarded (→ explicitly excluded, incl. via "Finish review").
 // So the count excludes anything in approvedIds or discardedIds. Shared by
 // the DRAFTS badge (reactive) and the initial-view decision (synchronous).
+/**
+ * After the server review state loads: should the editor move a coordinator
+ * from its opening view to Review? Only when drafts are waiting, no ?view= was
+ * asked for, and the user is still on the view the editor opened on (Standards).
+ */
+export function shouldLandOnReview(a: {
+  isProgramCoordinator: boolean;
+  viewParam: string | null;
+  openedOn: string;
+  current: string;
+  draftsWaiting: number;
+}): boolean {
+  return a.isProgramCoordinator && !a.viewParam && a.openedOn === 'standards' && a.current === 'standards' && a.draftsWaiting > 0;
+}
+
 function computeDraftsCount(s: {
   buckets?: Record<string, any> | null;
   tags?: any[] | null;
@@ -576,11 +592,35 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // this the toolbar Review button + draft counts would read an empty store on
   // a fresh load/reload (localStorage no longer carries buckets/tags/etc.).
   // Idempotent with ReviewSurface's own load; both read the same server state.
+  // The opening view above is decided from the browser's cached store, which a
+  // fresh browser doesn't have. Once the SERVER review state is loaded, land a
+  // coordinator on Review when drafts are still waiting — unless a ?view= asked
+  // for something else or they have already moved off the opening view.
+  const landedFromServerRef = useRef(false);
+  // The ?view= the editor was OPENED with (the URL-sync effect rewrites it to
+  // the current view right after mount, so read it once, here).
+  const openingViewParamRef = useRef<string | null>(
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('view') : null
+  );
+  const activeViewRef = useRef(activeView);
+  activeViewRef.current = activeView;
   useEffect(() => {
     if (!isProgramCoordinator || !submissionId) return;
     const store = useAIImportStore.getState();
     store.setSubmissionId(submissionId);
-    void store.loadPersistedReviewState();
+    const openedOn = activeViewRef.current;
+    void store.loadPersistedReviewState().then(() => {
+      if (landedFromServerRef.current) return;
+      landedFromServerRef.current = true;
+      if (!shouldLandOnReview({
+        isProgramCoordinator,
+        viewParam: openingViewParamRef.current,
+        openedOn,
+        current: activeViewRef.current,
+        draftsWaiting: computeDraftsCount(useAIImportStore.getState()),
+      })) return;
+      setActiveView('review-surface');
+    });
   }, [isProgramCoordinator, submissionId]);
 
   // 2026-06-07 (user-reported: "approved items not moved into the spec editor")
@@ -608,6 +648,8 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         });
       // The dashboard DRAFTS / workflow-summary also reflect approvals.
       queryClient.invalidateQueries({ queryKey: ['workflow-summary', submissionId] });
+      // Approving a numbered part's draft approves that part server-side.
+      queryClient.invalidateQueries({ queryKey: ['spec-parts', submissionId] });
     });
     return unsub;
   }, [submissionId, queryClient]);
@@ -2207,35 +2249,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     [submitSelfStudyMutation]
   );
 
-  // Calculate validated specs count for progress display
-  const validationProgress = React.useMemo(() => {
-    if (!standards || !submission?.standardsStatus) {
-      return { validated: 0, total: 0 };
-    }
-
-    let validated = 0;   // specs that PASSED (gates the all-pass submit readiness)
-    let evaluated = 0;   // specs the AI has reviewed at all (pass OR fail)
-    let total = 0;
-
-    for (const standard of standards) {
-      for (const spec of standard.specifications || []) {
-        const status = submission.standardsStatus?.[`${standard.code}_${spec.code}`];
-        // CR-050 — excluded specs drop out of the denominator entirely;
-        // they're not "validated" but also not part of the work that needs
-        // doing. Keeps the X/Y counter honest.
-        if (status?.excluded === true) continue;
-        total++;
-        if (status?.validationStatus === 'pass') validated++;
-        // A spec with any verdict (pass or fail) has been run through validation —
-        // this is what the header "Validated" counter reflects (rises with
-        // Validate-All), distinct from the all-pass submit gate.
-        if (status?.validationStatus === 'pass' || status?.validationStatus === 'fail') evaluated++;
-      }
-    }
-
-    return { validated, evaluated, total };
-  }, [standards, submission?.standardsStatus]);
-
   // CR-045 — count of items waiting in the Drafts (Review) queue, for the
   // PhaseIndicator's "2. Drafts (N)" badge. Mirrors the ReviewSurfaceButton
   // content check but produces a count rather than a boolean.
@@ -2260,37 +2273,38 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     [draftsBuckets, draftsTags, draftsCvs, draftsEvidenceDocs, draftsIntroductions, draftsApprovedIds, draftsDiscardedIds]
   );
 
-  // Check if entire self-study is ready for submission.
-  // CR-050 — a spec is satisfied when validationStatus === 'pass' OR
-  // excluded === true (PC has explicitly marked it not applicable).
-  // Mirrors the server's submitSelfStudy gate so the CTA's enabled state
-  // matches what the server will actually accept.
-  // A spec with numbered parts (4.a.1 …) also needs every part approved.
+  // ONE readiness rule, shared with the PC dashboard, the Final Submit dialog
+  // and the server submit gate (lib/submitReadiness ↔ server
+  // services/submitReadiness): level catalog, Not Applicable removed,
+  // validated = pass OR needs improvement, numbered parts approved, and no
+  // supporting file left unassigned.
   const specPartsState = useSpecParts(submissionId);
-  const isSelfStudyReadyForSubmit = React.useMemo(() => {
-    if (!standards || !submission?.standardsStatus) return false;
-
-    return standards.every(standard =>
-      (standard.specifications || []).every(spec => {
-        const status: any = submission.standardsStatus?.[`${standard.code}_${spec.code}`];
-        // Ready when the spec is substantively addressed (pass OR needs_improvement
-        // — a reader-facing verdict, not a hard fail) or marked Not Applicable.
-        // Only a hard 'fail' or an unassessed spec blocks submit. Legacy rows have
-        // only the binary validationStatus.
-        const v = status?.verdict;
-        if (status?.excluded === true) return true;
-        const partsDone =
-          specPartsState.approvedCount(standard.code, spec.code) ===
-          specPartsState.partsOf(standard.code, spec.code).length;
-        return (
-          partsDone &&
-          (v === 'pass' ||
-            v === 'needs_improvement' ||
-            (v == null && status?.validationStatus === 'pass'))
-        );
-      })
-    );
-  }, [standards, submission?.standardsStatus, specPartsState]);
+  const specGate = React.useMemo(
+    () =>
+      computeSpecGate(standards, submission?.standardsStatus as any, (std, spec) =>
+        specPartsState.partsOf(std, spec).length - specPartsState.approvedCount(std, spec)
+      ),
+    [standards, submission?.standardsStatus, specPartsState]
+  );
+  // Calculate validated specs count for progress display
+  const validationProgress = React.useMemo(
+    () => ({ validated: specGate.validated, evaluated: specGate.evaluated, total: specGate.total }),
+    [specGate]
+  );
+  // Unassigned supporting files block submit (CR-074) — same count the
+  // dashboard shows, from the shared server summary.
+  const readinessSummary = useQuery({
+    queryKey: ['workflow-summary', submissionId],
+    queryFn: async () => (await api.get(`/api/submissions/${submissionId}/workflow-summary`)).data,
+    enabled: !!submissionId && isProgramCoordinator,
+    staleTime: 15_000,
+  });
+  const refetchReadiness = readinessSummary.refetch;
+  useEffect(() => {
+    if (isProgramCoordinator && submissionId) void refetchReadiness();
+  }, [activeView, isProgramCoordinator, submissionId, refetchReadiness]);
+  const unassignedFileCount: number = readinessSummary.data?.submit?.unassignedFiles ?? 0;
+  const isSelfStudyReadyForSubmit = specGate.specsReady && unassignedFileCount === 0;
 
   // Check if submission is already submitted or locked.
   // Status list mirrors server/src/middleware/submissionLockout.ts so the
@@ -2758,9 +2772,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     to PASS (see the disabled-button tooltip). */}
                 <span
                   className="text-sm text-gray-500"
-                  title={`${validationProgress.evaluated} of ${validationProgress.total} specifications reviewed by AI · ${validationProgress.validated} passed`}
+                  title={`${validationProgress.validated} of ${validationProgress.total} specifications validated (pass or needs improvement) · ${validationProgress.evaluated} reviewed by AI`}
                 >
-                  {validationProgress.evaluated}/{validationProgress.total} Validated
+                  {validationProgress.validated}/{validationProgress.total} Validated
                 </span>
 
                 {/* Submit Self-Study Button */}
@@ -2778,7 +2792,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       ? "Self-study has been submitted for review"
                       : isSelfStudyReadyForSubmit
                       ? "Submit self-study for review - this will lock the document"
-                      : `All specifications must PASS validation, with every numbered part approved, before submitting (${validationProgress.validated} of ${validationProgress.total} passed; ${validationProgress.evaluated} reviewed)`
+                      : `Not ready to submit: ${notReadyReasons(specGate, unassignedFileCount).join('; ')}`
                   }
                 >
                   {submitSelfStudyMutation.isPending ? (
@@ -2888,6 +2902,10 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     }}
                     submissionId={submissionId}
                     partsReadOnly={isEditingDisabled}
+                    onSelectStandardIntro={(code) => {
+                      setSelectedStandard(code);
+                      setSelectedSpec(null);
+                    }}
                   />
                 )}
               </aside>
@@ -3125,10 +3143,10 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 <h2 className="mb-1 text-lg font-semibold text-gray-900">
                   Document Introduction
                 </h2>
-                <p className="mb-4 text-sm text-gray-500">
-                  The opening narrative of your self-study — mission, program
-                  description, and terms. Content imported via the Drafts
-                  pipeline lands here; edit it freely before submitting.
+                <p className="mb-4 text-sm text-gray-500" data-testid="doc-intro-help">
+                  {isProgramCoordinator
+                    ? 'The opening narrative of your self-study — mission, program description, and terms. Content imported via the Drafts pipeline lands here; edit it freely before submitting.'
+                    : "The program's opening narrative — its mission, program description, and terms, as submitted."}
                 </p>
                 <IntroductionEditor
                   key={`doc-intro-view-${editorRefreshKey}`}

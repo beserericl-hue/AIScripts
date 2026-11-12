@@ -1,8 +1,9 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { BookOpenCheck, ChevronRight, ClipboardList, FileText, Loader2 } from 'lucide-react';
+import { BookOpenCheck, ChevronRight, ClipboardList, FileText, Loader2, MessageSquare } from 'lucide-react';
 import { api } from '../../services/api';
+import { SiteVisitLinks } from '../siteVisit/SiteVisitLinks';
 
 const API_BASE = '/api';
 
@@ -132,6 +133,15 @@ export function ReaderSelfStudyPanel(): JSX.Element {
                     </button>
                     <button
                       type="button"
+                      data-testid={`reader-open-messages-${it._id}`}
+                      onClick={() => navigate(`/messages/${it._id}`)}
+                      title="Private conversations with the other readers on this review"
+                      className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <MessageSquare className="h-4 w-4" /> Messages
+                    </button>
+                    <button
+                      type="button"
                       data-testid={`reader-open-report-${it._id}`}
                       onClick={() => navigate(`/reader-report/${it._id}`)}
                       className="inline-flex items-center gap-1 rounded-md bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
@@ -153,6 +163,9 @@ export function ReaderSelfStudyPanel(): JSX.Element {
                     <span className="tabular-nums">{p.total}</span> marked overall
                   </div>
                 </div>
+                {it.assignmentType === 'lead_reader' && (
+                  <SiteVisitLinks submissionId={it._id} role="lead_reader" compact className="mt-3 border-t border-gray-100 pt-2" />
+                )}
               </div>
             );
           })}

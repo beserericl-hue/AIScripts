@@ -28,12 +28,13 @@ import {
 import { authenticate } from '../middleware/auth';
 import { submissionLockout } from '../middleware/submissionLockout';
 import multer from 'multer';
+import { utf8Upload } from '../middleware/utf8Upload';
 
 const router = Router();
 
 // Bulk supporting-evidence upload — memory storage, 50MB/file, up to 30 files.
 // Accepts pdf/docx/xlsx/pptx (the formats the review + Office viewer support).
-const bulkEvidenceUpload = multer({
+const bulkEvidenceUpload = utf8Upload({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024, files: 30 },
   fileFilter: (_req, file, cb) => {

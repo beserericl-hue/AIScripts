@@ -86,6 +86,22 @@ export function isExcludedFromSelfStudy(item: { tags?: string[] }): boolean {
   return (item.tags || []).some((t) => String(t) === EXCLUDED_MATRIX_TAG);
 }
 
+/** The auto-generated Reader Report PDF/DOCX (tagged reader-report…): no
+ *  Standard, but not a stray upload — the submit gate ignores it. */
+export function isGeneratedReaderReport(item: { tags?: string[] }): boolean {
+  return (item.tags || []).some((t) => String(t).startsWith('reader-report'));
+}
+
+/**
+ * THE definition of an unassigned file — the ones that block submit. Mirrors
+ * the server's unassignedEvidenceFilter (services/submitReadiness.ts): live,
+ * no Standard, not a generated reader report, not a curriculum matrix. Used
+ * by both the "Unassigned" chip count and the Unassigned group so they agree.
+ */
+export function isUnassignedFile(item: { standardCode?: string | null; tags?: string[]; isDeleted?: boolean }): boolean {
+  return !item.isDeleted && !item.standardCode && !isExcludedFromSelfStudy(item) && !isGeneratedReaderReport(item);
+}
+
 /** A readable file name: the real originalName, or — when that's just a number/
  *  letter from an import row — a label derived from its kind + standard. */
 /** Compact upload-date label, e.g. "Aug 6, 2026". */
@@ -194,11 +210,10 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
   // Standard (mirrors the server gate + the Review banner count). Exclude the
   // auto-generated Reader Report PDF/DOCX (no standardCode, but not stray
   // uploads — the submit gate ignores them too).
-  const unassignedItems = useMemo(
-    () => allEvidence.filter((e) =>
-      !e.standardCode &&
-      !isExcludedFromSelfStudy(e) &&
-      !(e.tags || []).some((t) => String(t).startsWith('reader-report'))),
+  const unassignedItems = useMemo(() => allEvidence.filter(isUnassignedFile), [allEvidence]);
+  // Generated Reader Report files — their own section, never counted as Unassigned.
+  const readerReportItems = useMemo(
+    () => allEvidence.filter((e) => !e.standardCode && isGeneratedReaderReport(e) && !isExcludedFromSelfStudy(e)),
     [allEvidence]
   );
   // Files kept in the library but excluded from the self-study (see
@@ -232,6 +247,7 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
     const grouped: Record<string, Record<string, Evidence[]>> = {};
     for (const item of source) {
       if (isExcludedFromSelfStudy(item)) continue; // rendered in its own section
+      if (!item.standardCode && !isUnassignedFile(item)) continue; // generated reports / deleted: not Unassigned
       const std = item.standardCode || 'unassigned';
       const spec = item.specCode || 'general';
       if (!grouped[std]) grouped[std] = {};
@@ -1002,7 +1018,9 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
           )}
           <span className="text-sm font-semibold text-amber-800 flex-shrink-0">Unassigned</span>
           <span className="text-sm text-amber-700/80 truncate flex-1">
-            Imported files awaiting a Standard — use “Assign to Standard” on each
+            {readOnly
+              ? 'Files the program has not filed under a Standard yet'
+              : 'Imported files awaiting a Standard — use “Assign to Standard” on each'}
           </span>
         </button>
           {useRecStatus && (
@@ -1091,6 +1109,33 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
             {excludedItems.map(renderEvidenceItem)}
           </div>
         )}
+      </div>
+    );
+  };
+
+  // Auto-generated Reader Report files (PDF / Word) — download and preview
+  // only; listed apart so they are never mistaken for unassigned uploads.
+  const renderReaderReportAccordion = () => {
+    if (assignmentFilter === 'unassigned' || readerReportItems.length === 0) return null;
+    const isExpanded = expandedStandards.has('reader-report');
+    return (
+      <div key="reader-report" className="border border-gray-200 rounded-lg overflow-hidden" data-testid="file-library-reader-reports">
+        <button
+          onClick={() => toggleStandard('reader-report')}
+          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors whitespace-nowrap"
+        >
+          {isExpanded ? (
+            <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
+          )}
+          <span className="text-sm font-semibold text-gray-700 flex-shrink-0">Generated reader reports</span>
+          <span className="text-sm text-gray-500 truncate flex-1">Created by the portal — not files to assign</span>
+          <span className="flex-shrink-0 text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full whitespace-nowrap">
+            {readerReportItems.length} file{readerReportItems.length !== 1 ? 's' : ''}
+          </span>
+        </button>
+        {isExpanded && <div className="px-4 pb-4 pt-3 border-t border-gray-100">{readerReportItems.map(renderEvidenceItem)}</div>}
       </div>
     );
   };
@@ -1569,6 +1614,7 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
             {renderIntroductionAccordion()}
             {/* Kept in the library but excluded from the self-study */}
             {renderExcludedAccordion()}
+            {renderReaderReportAccordion()}
             {/* Part I */}
             <div className="mb-4">
               <h3 className="text-xs font-bold uppercase text-gray-400 tracking-wider mb-2 px-1">

@@ -277,6 +277,20 @@ export const assignLeadReader = async (req: AuthenticatedRequest, res: Response)
     institution.assignedLeadReaderId = new mongoose.Types.ObjectId(leadReaderId);
     await institution.save();
 
+    // Keep the canonical role-by-institution roster in step with the legacy
+    // slot: the Settings → Institutions "Lead Readers" list reads
+    // User.roleAssignments, so a lead set only on the slot showed on the card
+    // but not in the list. (A PC at the same institution can't also review.)
+    const ras: any[] = (leadReader as any).roleAssignments || [];
+    const atInst = ras.filter((a) => String(a.institutionId) === String(institution._id));
+    if (!atInst.some((a) => a.role === 'lead_reader') && !atInst.some((a) => a.role === 'program_coordinator')) {
+      (leadReader as any).roleAssignments = [
+        ...ras,
+        { role: 'lead_reader', institutionId: institution._id, institutionName: institution.name },
+      ];
+      await leadReader.save();
+    }
+
     // TODO: Send notification email to lead reader
 
     return res.json({
@@ -286,6 +300,36 @@ export const assignLeadReader = async (req: AuthenticatedRequest, res: Response)
   } catch (error) {
     console.error('Assign lead reader error:', error);
     return res.status(500).json({ error: 'Failed to assign lead reader' });
+  }
+};
+
+/**
+ * Clear the institution's lead-reader slot (Admin only). Also removes that
+ * user's lead_reader assignment at this institution so the roster agrees.
+ */
+export const unassignLeadReader = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const institution = await Institution.findById(req.params.id);
+    if (!institution) return res.status(404).json({ error: 'Institution not found' });
+    const prev = institution.assignedLeadReaderId;
+    institution.assignedLeadReaderId = undefined as any;
+    await institution.save();
+    if (prev) {
+      const u: any = await User.findById(prev);
+      if (u && Array.isArray(u.roleAssignments)) {
+        const next = u.roleAssignments.filter(
+          (a: any) => !(String(a.institutionId) === String(institution._id) && a.role === 'lead_reader')
+        );
+        if (next.length !== u.roleAssignments.length) {
+          u.roleAssignments = next;
+          await u.save();
+        }
+      }
+    }
+    return res.json({ message: 'Lead reader unassigned', institution });
+  } catch (error) {
+    console.error('Unassign lead reader error:', error);
+    return res.status(500).json({ error: 'Failed to unassign lead reader' });
   }
 };
 

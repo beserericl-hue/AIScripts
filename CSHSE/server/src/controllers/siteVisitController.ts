@@ -10,6 +10,11 @@ import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 /**
  * Get all site visits
  */
+/** Earliest scheduledDate still counted as upcoming (see getSiteVisits). */
+export function upcomingCutoff(now: Date = new Date()): Date {
+  return new Date(now.getTime() - 36 * 60 * 60 * 1000);
+}
+
 export const getSiteVisits = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const {
@@ -30,7 +35,10 @@ export const getSiteVisits = async (req: AuthenticatedRequest, res: Response) =>
     if (status) query.status = status;
 
     if (upcoming === 'true') {
-      query.scheduledDate = { $gte: new Date() };
+      // Visit dates are stored as UTC midnight of the visit day, so "now" would
+      // already exclude a visit happening today. Keep a 36 h window (covers
+      // every US time zone); the dashboard narrows to the viewer's local day.
+      query.scheduledDate = { $gte: upcomingCutoff() };
     }
 
     if (startDate || endDate) {
@@ -160,7 +168,8 @@ export const scheduleSiteVisit = async (req: AuthenticatedRequest, res: Response
     // Create site visit
     const siteVisit = new SiteVisit({
       submissionId,
-      institutionId: submission.submitterId, // Assuming submitterId links to institution
+      // The visit belongs to the program's institution (coordinators list by it).
+      institutionId: submission.institutionId || submission.submitterId,
       institutionName: submission.institutionName,
       scheduledDate: new Date(scheduledDate),
       scheduledTime,

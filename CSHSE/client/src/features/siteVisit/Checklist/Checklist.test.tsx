@@ -242,3 +242,23 @@ describe('ChecklistView', () => {
     expect(screen.getByText(/Generating/)).toBeInTheDocument();
   });
 });
+
+describe('ChecklistView toolbar — no stray "0"', () => {
+  it('NEGATIVE: with no manual / follow-up items the toolbar ends at "N non-compliant" (no "0")', () => {
+    const items = [makeItem({ _id: 'a' }), makeItem({ _id: 'b', specCode: 'b' }), makeItem({ _id: 'c', specCode: 'c' })];
+    render(<ChecklistView {...handlers} data={makePayload(items)} isLoading={false} canWrite draftNotes={{}} />);
+    const toolbar = screen.getByTestId('checklist-toolbar');
+    const text = toolbar.textContent!.replace(/Export DOCX|Generating…/g, '').trim();
+    expect(text).toMatch(/3 non-compliant$/);
+    expect(screen.queryByTestId('checklist-count-manual')).not.toBeInTheDocument();
+  });
+  it('POSITIVE: manual + follow-up items are counted', () => {
+    const items = [
+      makeItem({ _id: 'a' }),
+      makeItem({ _id: 'b', specCode: 'b', inclusionReason: 'manual', source: 'manual' }),
+      makeItem({ _id: 'c', specCode: 'c', inclusionReason: 'follow_up' }),
+    ];
+    render(<ChecklistView {...handlers} data={makePayload(items)} isLoading={false} canWrite draftNotes={{}} />);
+    expect(screen.getByTestId('checklist-count-manual')).toHaveTextContent('2 manual / follow-up');
+  });
+});

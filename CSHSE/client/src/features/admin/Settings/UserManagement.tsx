@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useEffect, useState } from 'react';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { api } from '../../../services/api';
 import { useToastStore } from '../../../store/toastStore';
 import { useAuthStore } from '../../../store/authStore';
@@ -110,15 +110,33 @@ export function UserManagement() {
   const [boardDraft, setBoardDraft] = useState(false);
   const [savingEdits, setSavingEdits] = useState(false);
 
-  // Fetch users
-  const { data: usersData, isLoading: usersLoading } = useQuery({
-    queryKey: ['users', roleFilter],
+  // Fetch users — search runs on the SERVER across every user (not just the
+  // loaded page), debounced; "Load more" widens the page. The previous list
+  // stays on screen while a new search loads, so nothing blanks or spins forever.
+  const PAGE = 50;
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [userPages, setUserPages] = useState(1);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+  useEffect(() => setUserPages(1), [debouncedSearch, roleFilter]);
+  const {
+    data: usersData,
+    isLoading: usersLoading,
+    isFetching: usersFetching,
+    isError: usersError,
+  } = useQuery({
+    queryKey: ['users', roleFilter, debouncedSearch, userPages],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (roleFilter) params.append('role', roleFilter);
+      if (debouncedSearch) params.append('search', debouncedSearch);
+      params.append('limit', String(PAGE * userPages));
       const response = await api.get(`/api/users?${params}`);
       return response.data;
-    }
+    },
+    placeholderData: keepPreviousData,
   });
 
   // Fetch invitations
@@ -371,11 +389,9 @@ export function UserManagement() {
     return null;
   };
 
-  const filteredUsers = users.filter(
-    user =>
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // The server already applied the search; nothing is filtered client-side.
+  const filteredUsers = users;
+  const usersTotal: number = usersData?.pagination?.total ?? users.length;
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Never';
@@ -545,10 +561,14 @@ export function UserManagement() {
               <input
                 type="text"
                 placeholder="Search users..."
+                data-testid="user-search"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
               />
+              {usersFetching && !usersLoading && (
+                <Loader2 data-testid="user-search-busy" className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
+              )}
             </div>
             <select
               value={roleFilter}
@@ -572,13 +592,15 @@ export function UserManagement() {
               <div className="p-8 text-center">
                 <Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" />
               </div>
+            ) : usersError && !usersData ? (
+              <div className="p-8 text-center text-red-600" data-testid="users-error">Could not load users. Try again.</div>
             ) : filteredUsers.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
+              <div className="p-8 text-center text-gray-500" data-testid="users-empty">
                 <Users className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                <p>No users found</p>
+                <p>{debouncedSearch ? `No users match “${debouncedSearch}”` : 'No users found'}</p>
               </div>
-            ) : (
-              filteredUsers.map((user) => (
+            ) : (<>
+              {filteredUsers.map((user) => (
                 <div key={user._id} className="p-4 hover:bg-gray-50">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -668,8 +690,22 @@ export function UserManagement() {
                     </div>
                   </div>
                 </div>
-              ))
-            )
+              ))}
+              <div className="flex items-center justify-between p-3 text-xs text-gray-500" data-testid="users-count">
+                <span>Showing {filteredUsers.length} of {usersTotal} user{usersTotal === 1 ? '' : 's'}</span>
+                {filteredUsers.length < usersTotal && (
+                  <button
+                    type="button"
+                    data-testid="users-load-more"
+                    disabled={usersFetching}
+                    onClick={() => setUserPages((n) => n + 1)}
+                    className="rounded border border-gray-300 px-3 py-1 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Load more
+                  </button>
+                )}
+              </div>
+            </>)
           )}
 
           {activeTab === 'invitations' && (
@@ -973,24 +1009,27 @@ export function UserManagement() {
                 )}
 
                 {roleDraft.map((a, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
+                  // min-w-0 on the row + institution select: a <select> is otherwise
+                  // as wide as its longest option, pushing the remove button out.
+                  <div key={idx} className="flex min-w-0 items-center gap-2" data-testid={`edit-role-row-${idx}`}>
                     <select
                       value={a.role}
                       onChange={(e) => setRoleDraft((d) => d.map((x, i) => i === idx ? { ...x, role: e.target.value as RoleAssignment['role'] } : x))}
-                      className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                      className="shrink-0 rounded border border-gray-300 px-2 py-1.5 text-sm"
                     >
                       <option value="program_coordinator">Program Coordinator</option>
                       <option value="reader">Reader</option>
                       <option value="lead_reader">Lead Reader</option>
                     </select>
-                    <span className="text-sm text-gray-400">at</span>
+                    <span className="shrink-0 text-sm text-gray-400">at</span>
                     <select
                       value={a.institutionId}
+                      title={institutions.find((i: any) => i._id === a.institutionId)?.name || ''}
                       onChange={(e) => {
                         const inst = institutions.find((i: any) => i._id === e.target.value);
                         setRoleDraft((d) => d.map((x, i) => i === idx ? { ...x, institutionId: e.target.value, institutionName: inst?.name } : x));
                       }}
-                      className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                      className="w-0 min-w-0 flex-1 truncate rounded border border-gray-300 px-2 py-1.5 text-sm"
                     >
                       <option value="">— select institution —</option>
                       {institutions.map((inst: any) => (
@@ -999,7 +1038,9 @@ export function UserManagement() {
                     </select>
                     <button
                       onClick={() => setRoleDraft((d) => d.filter((_, i) => i !== idx))}
-                      className="rounded p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      className="shrink-0 rounded p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      data-testid={`edit-role-remove-${idx}`}
+                      aria-label="Remove role"
                       title="Remove role"
                     >
                       <Trash2 className="h-4 w-4" />

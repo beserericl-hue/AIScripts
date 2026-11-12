@@ -25,7 +25,7 @@ interface AuthenticatedRequest extends Request {
  */
 export const getUsers = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { role, institutionId, status, page = '1', limit = '50' } = req.query;
+    const { role, institutionId, status, search, page = '1', limit = '50' } = req.query;
     const userRole = req.user?.role;
 
     // Build query based on user's role
@@ -76,8 +76,24 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response) => {
       query.institutionId = institutionId;
     }
 
-    const pageNum = parseInt(page as string, 10);
-    const limitNum = parseInt(limit as string, 10);
+    // Search by name or email across ALL matching users (not just one page),
+    // still inside the role-based scope computed above.
+    const term = typeof search === 'string' ? search.trim().slice(0, 100) : '';
+    if (term) {
+      const esc = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const words = esc.split(/\s+/).filter(Boolean);
+      const wordClause = (w: string) => ({
+        $or: [
+          { firstName: { $regex: w, $options: 'i' } },
+          { lastName: { $regex: w, $options: 'i' } },
+          { email: { $regex: w, $options: 'i' } },
+        ],
+      });
+      query.$and = [...(query.$and || []), ...words.map(wordClause)];
+    }
+
+    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+    const limitNum = Math.min(500, Math.max(1, parseInt(limit as string, 10) || 50));
     const skip = (pageNum - 1) * limitNum;
 
     const [users, total] = await Promise.all([

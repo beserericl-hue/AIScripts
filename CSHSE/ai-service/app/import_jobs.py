@@ -1377,6 +1377,12 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
         ):
             job.introduction_hints[sec.id] = intro_hint
             key = intro_hint.split("introduction:", 1)[-1]  # 'document' | 'standard-N'
+            # A Standard ROOT row with nothing under it is only CSHSE's own
+            # standard statement (the heading) — not program writing. Don't make
+            # an empty, approvable Introduction draft out of it (ETSU: 20 of 21
+            # standard intros were empty and approving one wrote "<p></p>").
+            if not _section_has_body(sec):
+                continue
             scope = "standard" if key.startswith("standard-") else "document"
             std_code = key.split("-", 1)[1] if scope == "standard" else None
             ib = intro_struct.setdefault(
@@ -2158,6 +2164,20 @@ def _persist_evidence_docs_to_s3(job: "JobRecord", detections: list) -> None:
                 f"evidence_doc {d.section_id}: docx/S3 failed — "
                 f"{type(exc).__name__}: {exc}"
             )
+
+
+def _section_has_body(sec) -> bool:
+    """True when the section carries text beyond its heading (markdown body or
+    HTML with visible text / a table or image)."""
+    md = (sec.markdown or "")
+    if md.startswith("# "):
+        md = md.split("\n", 2)[-1] if "\n" in md else ""
+    if md.strip():
+        return True
+    html = getattr(sec, "html_snippet", None) or ""
+    if re.search(r"<(img|table)\b", html, re.I):
+        return True
+    return bool(re.sub(r"<[^>]+>|&nbsp;|\s", "", html))
 
 
 def _section_to_item(sec, rec) -> dict[str, Any]:

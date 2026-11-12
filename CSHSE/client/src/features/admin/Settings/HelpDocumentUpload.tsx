@@ -11,6 +11,7 @@ import {
   Trash2,
   Clock
 } from 'lucide-react';
+import { ConfirmDialog } from '../../../components/ConfirmDialog';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -59,8 +60,11 @@ export function HelpDocumentUpload() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['helpDocuments'] });
+      setToDelete(null);
     }
   });
+  // Removing takes the document out of the help chat's knowledge base — confirm first.
+  const [toDelete, setToDelete] = useState<HelpDoc | null>(null);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -134,6 +138,16 @@ export function HelpDocumentUpload() {
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog
+        open={!!toDelete}
+        testId="help-doc-confirm"
+        title={`Remove “${toDelete?.title || toDelete?.fileName || ''}”?`}
+        message="This removes the document from this list. Its text stays in the AI help chat's knowledge base (shared by the live and test portals) until it is removed there, so the chat may still answer from it."
+        confirmLabel="Remove document"
+        busy={deleteMutation.isPending}
+        onCancel={() => setToDelete(null)}
+        onConfirm={() => toDelete && deleteMutation.mutate(toDelete._id)}
+      />
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex items-center gap-3">
@@ -141,7 +155,7 @@ export function HelpDocumentUpload() {
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Help Document Upload</h2>
             <p className="text-sm text-gray-500">
-              Upload documents to the AI help chat knowledge base. Supported formats: PDF, Markdown (.md), and plain text.
+              Upload documents to the AI help chat knowledge base. Supported formats: PDF, Markdown (.md), and plain text (.txt); Markdown and text files are converted to PDF before loading.
             </p>
           </div>
         </div>
@@ -270,8 +284,9 @@ export function HelpDocumentUpload() {
                   </div>
                 </div>
                 <button
-                  onClick={() => deleteMutation.mutate(doc._id)}
+                  onClick={() => setToDelete(doc)}
                   disabled={deleteMutation.isPending}
+                  data-testid={`help-doc-delete-${doc._id}`}
                   className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
                   title="Remove from list"
                 >

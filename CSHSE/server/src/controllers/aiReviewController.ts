@@ -12,6 +12,8 @@
  *   POST   /api/submissions/:submissionId/review/apply      — read aiReviewState, push approved items to the editor
 
  */
+import { introItemHasBody } from '../services/introItems';
+import { syncPartApprovalsFromReview } from '../services/specPartApprovals';
 import { splitReviewStateIntoParts, composeSpecNarrativeHtml } from '../services/specPartSplit';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
@@ -31,6 +33,7 @@ import { extractFileText, reviewCoverage, xrefPlacement } from '../services/cshs
 import { suggestStandardForFile, NarrativeTuple, titleFromFilename, folderStandardFromPath } from '../services/evidenceStandardSuggester';
 import { indexEvidenceFile, indexAllForSubmission } from '../services/evidenceIndexer';
 import { signFileAccessToken } from '../services/fileAccessToken';
+import { fixUploadFilename } from '../middleware/utf8Upload';
 import { getLevelStandards, normalizeLevel } from '../data/levelStandards';
 import {
   CURRICULUM_MATRIX_EXCLUDED_TAG,
@@ -721,7 +724,8 @@ async function materializeApprovedToEditor(
   const introsState = (state.introductions || {}) as Record<string, { items?: any[] }>;
   let introTouched = false;
   for (const [ik, ib] of Object.entries(introsState)) {
-    const approvedItems = (ib?.items || []).filter((it: any) => approved.has(it.sectionId));
+    // An empty draft (no text) never overwrites the editor's introduction.
+    const approvedItems = (ib?.items || []).filter((it: any) => approved.has(it.sectionId) && introItemHasBody(it));
     if (approvedItems.length === 0) continue;
     const html = approvedItems
       .map((it: any) => it.htmlSnippet || `<p>${escapeHtml(it.snippet || '')}</p>`)
@@ -1147,6 +1151,9 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
   // Auto-apply: approving moves the text straight into the editor (replaces the
   // old separate "Apply to editor" button). Idempotent — safe on every call.
   const affected = await materializeApprovedToEditor(submission, req.user?.id);
+  // Approving a numbered part's draft (4.a.2 …) approves that part, so the
+  // rail's "n/4 parts" and the submit gate follow Review.
+  syncPartApprovalsFromReview(submission, req.user?.id);
   await submission.save();
   // 2026-06-09 — instead of synchronously evaluating up to 24 specs (which left
   // the rest un-evaluated), ENQUEUE every affected spec for background AI
@@ -1156,6 +1163,7 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
   res.json({
     ok: true,
     approvedIds: state.approvedIds,
+    specPartApprovals: (submission as any).specPartApprovals || {},
     evidence: (submission as any).__evidenceStats ?? null,
     evalQueued, // how many specs were (re)queued for background evaluation
   });
@@ -2622,19 +2630,10 @@ export async function getReviewEvidenceDocPublicUrl(req: AuthenticatedRequest, r
 // AI cross-reference placement of UNASSIGNED supporting-evidence files
 // ============================================================================
 
-/** Multer decodes multipart filenames as latin1 — "Program Differentiators –
- *  ETSU" arrives as "Program Differentiators â\u0080\u0093 ETSU". Undo it when
- *  the string round-trips cleanly as UTF-8. */
-export function fixLatin1Filename(name: string): string {
-  const s = String(name || '');
-  if (!/[\u0080-\u00ff]/.test(s)) return s;
-  try {
-    const fixed = Buffer.from(s, 'latin1').toString('utf8');
-    return fixed.includes('\ufffd') ? s : fixed;
-  } catch {
-    return s;
-  }
-}
+/** Multer decodes multipart filenames as latin1. Every upload route now uses
+ *  utf8Upload (middleware/utf8Upload), which repairs them on arrival; this
+ *  alias still repairs names stored before that fix when they are displayed. */
+export const fixLatin1Filename = fixUploadFilename;
 
 /** Text extraction with one retry — under a large folder upload the
  *  ai-service extractor sometimes times out (ETSU: 15 Word/Excel files that

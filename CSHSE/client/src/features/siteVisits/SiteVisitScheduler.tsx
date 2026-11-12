@@ -18,6 +18,7 @@ import {
   CalendarClock,
 } from 'lucide-react';
 import { format, formatDistanceToNow, addDays } from 'date-fns';
+import { dateOnly } from '../../lib/dateOnly';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -193,7 +194,7 @@ export function SiteVisitScheduler({
     setFormData({
       institutionId: visit.institutionId?._id || '',
       submissionId: visit.submissionId || '',
-      scheduledDate: format(new Date(visit.scheduledDate), 'yyyy-MM-dd'),
+      scheduledDate: format(dateOnly(visit.scheduledDate), 'yyyy-MM-dd'),
       scheduledTime: visit.scheduledTime || '09:00',
       duration: visit.duration || 480,
       location: {
@@ -323,7 +324,7 @@ export function SiteVisitScheduler({
                 <div className="ml-7 space-y-1">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Calendar className="w-4 h-4 text-gray-400" />
-                    {format(new Date(visit.scheduledDate), 'EEEE, MMMM d, yyyy')}
+                    {format(dateOnly(visit.scheduledDate), 'EEEE, MMMM d, yyyy')}
                     {visit.scheduledTime && ` at ${visit.scheduledTime}`}
                     {visit.duration && (
                       <span className="text-gray-400">
@@ -352,7 +353,7 @@ export function SiteVisitScheduler({
 
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-400">
-                  {formatDistanceToNow(new Date(visit.scheduledDate), {
+                  {formatDistanceToNow(dateOnly(visit.scheduledDate), {
                     addSuffix: true,
                   })}
                 </span>

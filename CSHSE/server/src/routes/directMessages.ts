@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   listThreads,
   createThread,
+  listRecipients,
   getThread,
   postMessage
 } from '../controllers/directMessageController';
@@ -15,6 +16,7 @@ router.use(authenticate);
 // PCs are 403 at the controller level; this is a reader / lead_reader /
 // admin surface only.
 
+router.get('/submissions/:submissionId/messages/recipients', listRecipients);
 router.get('/submissions/:submissionId/messages', listThreads);
 router.post('/submissions/:submissionId/messages', createThread);
 router.get('/messages/:threadId', getThread);

@@ -136,6 +136,14 @@ describe('CompilationTabView', () => {
     );
   });
 
+  it('header links to the site-visit checklist and itinerary (with and without rows)', () => {
+    const { rerender } = render(wrap(<CompilationTabView {...baseHandlers} data={sample} isLoading={false} />));
+    expect(screen.getByTestId('site-visit-checklist-link-sub-1')).toHaveAttribute('href', '/site-visit/sub-1/checklist');
+    expect(screen.getByTestId('site-visit-itinerary-link-sub-1')).toHaveAttribute('href', '/site-visit/sub-1/itinerary');
+    rerender(wrap(<CompilationTabView {...baseHandlers} data={{ ...sample, rows: [] }} isLoading={false} />));
+    expect(screen.getByTestId('site-visit-checklist-link-sub-1')).toBeInTheDocument();
+  });
+
   it('renders a column header per reader', () => {
     render(
       wrap(

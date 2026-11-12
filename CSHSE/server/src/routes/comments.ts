@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import { utf8Upload } from '../middleware/utf8Upload';
 import {
   getComments,
   getCommentSummary,
@@ -24,7 +25,7 @@ const router = Router();
 
 // CR-021 / Sprint 5.3 — reader file attachments on comments.
 // Multer memory storage; controller enforces MIME allowlist + 25 MB cap.
-const attachmentUpload = multer({
+const attachmentUpload = utf8Upload({
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 + 1024 }
 });

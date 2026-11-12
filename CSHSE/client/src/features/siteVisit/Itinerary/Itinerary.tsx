@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Plus, Trash2, FileDown, Save } from 'lucide-react';
 import { api } from '../../../services/api';
+import { dateOnly } from '../../../lib/dateOnly';
 
 // ---------------------------------------------------------------------------
 // CR-013 / Sprint 6.2 — site-visit itinerary co-edit surface.
@@ -46,6 +47,44 @@ function fromCsv(s: string): string[] {
     .split(',')
     .map((x) => x.trim())
     .filter(Boolean);
+}
+
+/**
+ * A comma-separated list input. It keeps the text exactly as typed (spaces,
+ * a trailing comma) — re-rendering from the parsed list on every keystroke used
+ * to swallow them ("Program Director, Visit team" became
+ * "ProgramDirectorVisitteam"). The parsed list is still reported on every
+ * change, so Save always has it; on blur the text is tidied to "a, b, c".
+ */
+export function CsvInput({
+  value,
+  onChange,
+  ...rest
+}: { value?: string[]; onChange: (next: string[]) => void } & Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  'value' | 'onChange'
+>): JSX.Element {
+  const [raw, setRaw] = React.useState(() => toCsv(value));
+  // An outside change (slot removed / reloaded) that isn't what the text
+  // already says replaces the text.
+  React.useEffect(() => {
+    if (toCsv(fromCsv(raw)) !== toCsv(value)) setRaw(toCsv(value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  return (
+    <input
+      {...rest}
+      value={raw}
+      onChange={(e) => {
+        setRaw(e.target.value);
+        onChange(fromCsv(e.target.value));
+      }}
+      onBlur={(e) => {
+        setRaw(toCsv(fromCsv(raw)));
+        rest.onBlur?.(e);
+      }}
+    />
+  );
 }
 
 export interface ItineraryViewProps {
@@ -125,7 +164,7 @@ export function ItineraryView({
           {data.siteVisit.scheduledDate && (
             <>
               <span className="text-slate-400"> · </span>
-              {new Date(data.siteVisit.scheduledDate).toLocaleDateString()}
+              {dateOnly(data.siteVisit.scheduledDate).toLocaleDateString()}
               {data.siteVisit.scheduledTime ? ` at ${data.siteVisit.scheduledTime}` : ''}
             </>
           )}
@@ -210,10 +249,10 @@ export function ItineraryView({
               </label>
               <label className="text-xs text-slate-700">
                 Attendees (comma-separated)
-                <input
+                <CsvInput
                   data-testid={`itin-slot-${idx}-attendees`}
-                  value={toCsv(slot.attendees)}
-                  onChange={(e) => updateSlot(idx, { attendees: fromCsv(e.target.value) })}
+                  value={slot.attendees}
+                  onChange={(next) => updateSlot(idx, { attendees: next })}
                   disabled={!canEdit}
                   placeholder="Pat, Lin, Bob"
                   className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1 text-xs"
@@ -223,10 +262,10 @@ export function ItineraryView({
             <div className="mt-2">
               <label className="text-xs text-slate-700">
                 Specs addressed (comma-separated)
-                <input
+                <CsvInput
                   data-testid={`itin-slot-${idx}-specs`}
-                  value={toCsv(slot.specCodes)}
-                  onChange={(e) => updateSlot(idx, { specCodes: fromCsv(e.target.value) })}
+                  value={slot.specCodes}
+                  onChange={(next) => updateSlot(idx, { specCodes: next })}
                   disabled={!canEdit}
                   placeholder="1.a, 2.b, 3.c"
                   className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1 text-xs"

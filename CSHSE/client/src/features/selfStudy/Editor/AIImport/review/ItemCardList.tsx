@@ -1238,7 +1238,7 @@ export function ItemCardList({
           <div className="space-y-6">
             <KindSection
               title="Narratives"
-              subtitle='Written into the standard editor when you click "Apply to editor"'
+              subtitle="Written into the standard editor as soon as you approve them"
               icon="📝"
               items={groups.narratives}
               startIdx={1}
@@ -2034,7 +2034,7 @@ function CVsView({ cvs, onShowInSource, approvedIds, onToggleApproval, onApprove
                     .docx (fileId set). The pre-Apply disabled "pending Apply"
                     button was removed — it confused coordinators who expected a
                     working download. Use "View source" to read the CV now; the
-                    file becomes downloadable after Apply to editor. */}
+                    file becomes downloadable once the CV is approved. */}
                 {cv.fileId && submissionId && (
                   <a
                     href={`/api/submissions/${submissionId}/evidence/${cv.fileId}/download`}

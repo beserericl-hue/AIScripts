@@ -2,6 +2,27 @@ import { Response } from 'express';
 import { Spec } from '../models/Spec';
 import { Institution } from '../models/Institution';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { getLevelStandards } from '../data/levelStandards';
+
+/**
+ * The number of standards a spec covers, from the CSHSE catalog, when the
+ * spec's name names its degree level (Associate 20, Baccalaureate 21,
+ * Master's 18). The stored standardsCount is a hand-entered field that
+ * defaulted to 21 — the Master's card said 21. Unrecognised names keep the
+ * stored value.
+ */
+export function catalogStandardsCount(name?: string | null): number | null {
+  const n = String(name || '').toLowerCase();
+  const level = /\bassociate/.test(n) ? 'associate' : /\bmaster/.test(n) ? 'masters' : /\bbaccalaureate|\bbachelor/.test(n) ? 'bachelors' : null;
+  if (!level) return null;
+  return getLevelStandards(level)?.length || null;
+}
+
+function withCatalogCount(spec: any) {
+  const o = typeof spec?.toObject === 'function' ? spec.toObject() : spec;
+  const n = catalogStandardsCount(o?.name);
+  return n ? { ...o, standardsCount: n } : o;
+}
 
 /**
  * Get all specs
@@ -19,7 +40,7 @@ export const getSpecs = async (req: AuthenticatedRequest, res: Response) => {
       .populate('uploadedBy', 'firstName lastName email')
       .sort({ uploadedAt: -1 });
 
-    return res.json({ specs });
+    return res.json({ specs: specs.map(withCatalogCount) });
   } catch (error: any) {
     console.error('Error fetching specs:', error);
     return res.status(500).json({ error: 'Failed to fetch specs' });
@@ -38,7 +59,7 @@ export const getSpec = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(404).json({ error: 'Spec not found' });
     }
 
-    return res.json({ spec });
+    return res.json({ spec: withCatalogCount(spec) });
   } catch (error: any) {
     console.error('Error fetching spec:', error);
     return res.status(500).json({ error: 'Failed to fetch spec' });
@@ -79,7 +100,7 @@ export const createSpec = async (req: AuthenticatedRequest, res: Response) => {
     const populatedSpec = await Spec.findById(spec._id)
       .populate('uploadedBy', 'firstName lastName email');
 
-    return res.status(201).json({ spec: populatedSpec });
+    return res.status(201).json({ spec: withCatalogCount(populatedSpec) });
   } catch (error: any) {
     console.error('Error creating spec:', error);
     return res.status(500).json({ error: 'Failed to create spec' });
@@ -133,7 +154,7 @@ export const updateSpec = async (req: AuthenticatedRequest, res: Response) => {
     const populatedSpec = await Spec.findById(spec._id)
       .populate('uploadedBy', 'firstName lastName email');
 
-    return res.json({ spec: populatedSpec });
+    return res.json({ spec: withCatalogCount(populatedSpec) });
   } catch (error: any) {
     console.error('Error updating spec:', error);
     return res.status(500).json({ error: 'Failed to update spec' });

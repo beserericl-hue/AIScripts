@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { WebhookSettings } from '../models/WebhookSettings';
 import { HelpDocument } from '../models/HelpDocument';
+import { isTextUpload, pdfNameFor, textToPdf } from '../services/textToPdf';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -74,12 +75,23 @@ export const uploadHelpDocument = async (req: AuthenticatedRequest, res: Respons
     // Construct callback URL for n8n to notify on completion
     const callbackUrl = getCallbackUrl(req, '/api/webhooks/help/upload/callback');
 
+    // Markdown / text go to n8n as a PDF: the workflow's text branch times out
+    // on real documents, its PDF branch works (see services/textToPdf.ts).
+    let sendBuffer = file.buffer;
+    let sendName = file.originalname;
+    let sendMime = file.mimetype;
+    if (isTextUpload(file.originalname, file.mimetype)) {
+      sendBuffer = await textToPdf(file.buffer.toString('utf8'), title || file.originalname);
+      sendName = pdfNameFor(file.originalname);
+      sendMime = 'application/pdf';
+    }
+
     // Send as JSON with base64-encoded file data (matches spec loader pattern)
-    const base64Data = file.buffer.toString('base64');
+    const base64Data = sendBuffer.toString('base64');
     const payload = {
       data: base64Data,
-      filename: file.originalname,
-      mimeType: file.mimetype,
+      filename: sendName,
+      mimeType: sendMime,
       source: source || 'handbook',
       title: title || file.originalname,
       docId: helpDoc._id.toString(),
@@ -176,8 +188,23 @@ export const receiveHelpUploadCallback = async (req: Request, res: Response) => 
 /**
  * Get all help documents (DB-backed list replacing localStorage)
  */
+/** n8n normally reports back within a minute; after this, the upload is treated as failed. */
+export const HELP_UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
+export const HELP_UPLOAD_TIMEOUT_ERROR =
+  'The help knowledge base did not confirm this document within 15 minutes, so it may not have been added. Try uploading it again; if it keeps happening, the n8n "CSHSE Help - Document Upload" workflow needs attention.';
+
+/** Mark uploads that never got their n8n callback as failed (so they don't sit at "processing" forever). */
+export async function expireStuckHelpUploads(now: Date = new Date()): Promise<number> {
+  const r = await HelpDocument.updateMany(
+    { status: 'processing', uploadedAt: { $lt: new Date(now.getTime() - HELP_UPLOAD_TIMEOUT_MS) } },
+    { $set: { status: 'error', error: HELP_UPLOAD_TIMEOUT_ERROR } }
+  );
+  return r.modifiedCount || 0;
+}
+
 export const getHelpDocuments = async (_req: Request, res: Response) => {
   try {
+    await expireStuckHelpUploads();
     const docs = await HelpDocument.find().select('-callbackToken').sort({ uploadedAt: -1 });
     console.log(`[HelpDocuments] Returning ${docs.length} documents`);
     return res.json(docs);

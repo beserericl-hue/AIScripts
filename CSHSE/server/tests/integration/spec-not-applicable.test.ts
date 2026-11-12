@@ -185,6 +185,33 @@ describe('CR-050 — mark spec not applicable', () => {
     expect(res.status).toBe(404);
   });
 
+  it('POSITIVE: a spec that exists only in the program level catalog (bachelors 21.i) can be marked N/A', async () => {
+    // 21.i is in the baccalaureate catalog (96 specs) but not the generic 83.
+    const has = (cat: any[] | null, s: string, p: string) => !!cat?.find((x: any) => String(x.code) === s)?.specifications?.find((y: any) => String(y.code) === p);
+    expect(has(getAllStandards() as any, '21', 'i')).toBe(false);
+    expect(has(getLevelStandards('bachelors') as any, '21', 'i')).toBe(true);
+    const { user } = await createUser({ role: 'program_coordinator' });
+    const sub = await seedSubmission({ submitterId: user._id });
+    const res = await request(app)
+      .post(`/api/submissions/${sub._id}/standards/21/specs/i/not-applicable`)
+      .set('Authorization', `Bearer ${signTokenFor(user as any)}`)
+      .send({ reason: 'Not offered.' });
+    expect(res.status).toBe(200);
+    const fresh: any = await Submission.findById(sub._id);
+    expect(fresh.standardsStatus.get('21_i')?.excluded).toBe(true);
+  });
+
+  it('NEGATIVE: the same code is refused for a level that has no such spec (associate 21.i → 404)', async () => {
+    const { user } = await createUser({ role: 'program_coordinator' });
+    const sub = await seedSubmission({ submitterId: user._id });
+    await Submission.updateOne({ _id: sub._id }, { $set: { programLevel: 'associate' } });
+    const res = await request(app)
+      .post(`/api/submissions/${sub._id}/standards/21/specs/i/not-applicable`)
+      .set('Authorization', `Bearer ${signTokenFor(user as any)}`)
+      .send({ reason: 'x' });
+    expect(res.status).toBe(404);
+  });
+
   it('submissionLockout middleware refuses N/A on a locked submission (403)', async () => {
     // The route is wrapped in submissionLockout — once the submission is
     // post-submit, a non-admin PC cannot toggle N/A.

@@ -6,6 +6,7 @@ import {
   updateInstitution,
   archiveInstitution,
   assignLeadReader,
+  unassignLeadReader,
   assignReaders
 } from '../controllers/institutionController';
 import { authenticate, requireAdmin } from '../middleware/auth';
@@ -60,6 +61,13 @@ router.delete('/:id', requireAdmin, archiveInstitution);
  * @access  Private (Admin only)
  */
 router.post('/:id/lead-reader', requireAdmin, assignLeadReader);
+
+/**
+ * @route   DELETE /api/institutions/:id/lead-reader
+ * @desc    Clear the institution's lead reader (slot + roster assignment)
+ * @access  Private (Admin only)
+ */
+router.delete('/:id/lead-reader', requireAdmin, unassignLeadReader);
 
 /**
  * @route   POST /api/institutions/:id/readers

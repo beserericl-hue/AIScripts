@@ -231,4 +231,57 @@ describe('CR-023 — relay/unrelay/escalate transitions', () => {
       .set('Authorization', `Bearer ${signTokenFor(pc as any)}`);
     expect(pcRes.status).toBe(403);
   });
+
+  it('NEGATIVE: the coordinator\'s own Needs Improvement notes are never in the relay queue', async () => {
+    const { user: lead } = await createUser({ role: 'lead_reader' });
+    const { user: pc } = await createUser({ role: 'program_coordinator' });
+    const { user: reader } = await createUser({ role: 'reader' });
+    const sub = await seedSubmission(pc._id as any);
+    await assignToSubmission(sub, lead, 'lead_reader');
+    await seedComment(sub._id, reader._id, 'Reader A'); // POSITIVE: reader comment awaiting relay
+    await seedComment(sub._id, lead._id, 'Lead L', { authorRole: 'lead_reader' }); // POSITIVE: lead comment
+    await seedComment(sub._id, pc._id, 'Nicole PC', { authorRole: 'program_coordinator', content: 'Needs Improvement: we will add the 2026 minutes.' });
+    await seedComment(sub._id, pc._id, 'Nicole PC', { authorRole: 'program_coordinator', boardEscalated: true });
+    const res = await request(app)
+      .get(`/api/submissions/${sub._id}/comments/relay-queue`)
+      .set('Authorization', `Bearer ${signTokenFor(lead as any)}`);
+    expect(res.status).toBe(200);
+    const roles = res.body.comments.map((c: any) => c.authorRole).sort();
+    expect(roles).toEqual(['lead_reader', 'reader']);
+    expect(res.body.comments.some((c: any) => String(c.authorId) === String(pc._id))).toBe(false);
+  });
+});
+
+describe('Comment counter — toolbar "Comments N" matches the panel', () => {
+  it('POSITIVE: a reader\'s summary for 4.a counts that spec\'s comments (as total), like the list', async () => {
+    const { user: pc } = await createUser({ role: 'program_coordinator' });
+    const { user: reader } = await createUser({ role: 'reader' });
+    const sub = await seedSubmission(pc._id as any);
+    await assignToSubmission(sub, reader as any, 'reader');
+    await seedComment(sub._id, reader._id, 'R One', { standardCode: '4', specCode: 'a' });
+    await seedComment(sub._id, reader._id, 'R One', { standardCode: '4', specCode: 'a', isResolved: true });
+    await seedComment(sub._id, reader._id, 'R One', { standardCode: '1', specCode: 'a' });
+    const tok = signTokenFor(reader as any);
+    const sum = await request(app).get(`/api/submissions/${sub._id}/comments/summary?standardCode=4&specCode=a`).set('Authorization', `Bearer ${tok}`);
+    const list = await request(app).get(`/api/submissions/${sub._id}/comments?standardCode=4&specCode=a`).set('Authorization', `Bearer ${tok}`);
+    expect(sum.status).toBe(200);
+    expect(sum.body.total).toBe(2);
+    expect(sum.body.total).toBe(list.body.comments.length);
+    expect(sum.body.unresolved).toBe(1);
+    const all = await request(app).get(`/api/submissions/${sub._id}/comments/summary`).set('Authorization', `Bearer ${tok}`);
+    expect(all.body.total).toBe(3);
+    expect(all.body.totalComments).toBe(3); // the long names stay for CommentNavigation
+  });
+
+  it('NEGATIVE: a spec with no comments counts 0; the PC still gets 0', async () => {
+    const { user: pc } = await createUser({ role: 'program_coordinator' });
+    const { user: reader } = await createUser({ role: 'reader' });
+    const sub = await seedSubmission(pc._id as any);
+    await assignToSubmission(sub, reader as any, 'reader');
+    await seedComment(sub._id, reader._id, 'R One', { standardCode: '4', specCode: 'a' });
+    const none = await request(app).get(`/api/submissions/${sub._id}/comments/summary?standardCode=4&specCode=b`).set('Authorization', `Bearer ${signTokenFor(reader as any)}`);
+    expect(none.body.total).toBe(0);
+    const asPc = await request(app).get(`/api/submissions/${sub._id}/comments/summary?standardCode=4&specCode=a`).set('Authorization', `Bearer ${signTokenFor(pc as any)}`);
+    expect(asPc.body.total).toBe(0);
+  });
 });
