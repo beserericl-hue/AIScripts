@@ -134,6 +134,9 @@ export function FinalSubmitModal({
   // CR-074 — unassigned-file errors are a HARD block, separate from the
   // overridable validation gaps. The override checkbox never clears them.
   const unassignedFiles = (preflight?.unassignedFiles) || [];
+  // The server lists at most 25 names; the TOTAL is counts.unassignedFiles —
+  // the same number the dashboard and the submit gate use (was "25 files" vs 55).
+  const unassignedTotal = Math.max(preflight?.counts?.unassignedFiles ?? 0, unassignedFiles.length);
   const hasUnassignedBlock =
     unassignedFiles.length > 0 ||
     !!preflight?.errors.some((e) => e.code === 'UNASSIGNED_FILES');
@@ -244,8 +247,8 @@ export function FinalSubmitModal({
               className="rounded-md border border-red-300 bg-red-50 p-3 text-sm"
             >
               <p className="font-semibold text-red-900">
-                {unassignedFiles.length > 0
-                  ? `${unassignedFiles.length} file${unassignedFiles.length === 1 ? '' : 's'} not yet assigned to a Standard`
+                {unassignedTotal > 0
+                  ? `${unassignedTotal} file${unassignedTotal === 1 ? '' : 's'} not yet assigned to a Standard`
                   : 'Some files are not yet assigned to a Standard'}
               </p>
               <p className="mt-0.5 text-xs text-red-800">
@@ -256,8 +259,8 @@ export function FinalSubmitModal({
                   {unassignedFiles.slice(0, 12).map((f) => (
                     <li key={f.id} className="leading-snug">{f.name}</li>
                   ))}
-                  {unassignedFiles.length > 12 && (
-                    <li className="list-none pt-1 text-xs text-red-700">…and {unassignedFiles.length - 12} more.</li>
+                  {unassignedTotal > 12 && (
+                    <li className="list-none pt-1 text-xs text-red-700">…and {unassignedTotal - 12} more.</li>
                   )}
                 </ul>
               )}
