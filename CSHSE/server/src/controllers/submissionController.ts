@@ -1404,8 +1404,10 @@ export const markSpecNotApplicable = async (req: AuthenticatedRequest, res: Resp
       return res.status(409).json({ error: 'Submission is locked' });
     }
 
-    // Sanity-check the spec exists in the rubric so we don't create dead keys.
-    const allStandards = getAllStandards();
+    // Sanity-check the spec exists in THIS program's level catalog (the same
+    // one the spec counts and submit gate use — 96 for bachelors, so e.g. 21.i
+    // exists) so we don't create dead keys.
+    const allStandards = catalogFor((submission as any).programLevel);
     const std = allStandards.find((s) => String(s.code) === String(standardCode));
     const spec = std?.specifications?.find((sp) => String(sp.code) === String(specCode));
     if (!std || !spec) {
