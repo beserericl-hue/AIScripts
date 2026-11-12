@@ -437,6 +437,21 @@ function ReviewSurfaceButton({
 // state) or discarded (→ explicitly excluded, incl. via "Finish review").
 // So the count excludes anything in approvedIds or discardedIds. Shared by
 // the DRAFTS badge (reactive) and the initial-view decision (synchronous).
+/**
+ * After the server review state loads: should the editor move a coordinator
+ * from its opening view to Review? Only when drafts are waiting, no ?view= was
+ * asked for, and the user is still on the view the editor opened on (Standards).
+ */
+export function shouldLandOnReview(a: {
+  isProgramCoordinator: boolean;
+  viewParam: string | null;
+  openedOn: string;
+  current: string;
+  draftsWaiting: number;
+}): boolean {
+  return a.isProgramCoordinator && !a.viewParam && a.openedOn === 'standards' && a.current === 'standards' && a.draftsWaiting > 0;
+}
+
 function computeDraftsCount(s: {
   buckets?: Record<string, any> | null;
   tags?: any[] | null;
@@ -582,11 +597,35 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // this the toolbar Review button + draft counts would read an empty store on
   // a fresh load/reload (localStorage no longer carries buckets/tags/etc.).
   // Idempotent with ReviewSurface's own load; both read the same server state.
+  // The opening view above is decided from the browser's cached store, which a
+  // fresh browser doesn't have. Once the SERVER review state is loaded, land a
+  // coordinator on Review when drafts are still waiting — unless a ?view= asked
+  // for something else or they have already moved off the opening view.
+  const landedFromServerRef = useRef(false);
+  // The ?view= the editor was OPENED with (the URL-sync effect rewrites it to
+  // the current view right after mount, so read it once, here).
+  const openingViewParamRef = useRef<string | null>(
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('view') : null
+  );
+  const activeViewRef = useRef(activeView);
+  activeViewRef.current = activeView;
   useEffect(() => {
     if (!canReviewSurface || !submissionId) return;
     const store = useAIImportStore.getState();
     store.setSubmissionId(submissionId);
-    void store.loadPersistedReviewState();
+    const openedOn = activeViewRef.current;
+    void store.loadPersistedReviewState().then(() => {
+      if (landedFromServerRef.current) return;
+      landedFromServerRef.current = true;
+      if (!shouldLandOnReview({
+        isProgramCoordinator,
+        viewParam: openingViewParamRef.current,
+        openedOn,
+        current: activeViewRef.current,
+        draftsWaiting: computeDraftsCount(useAIImportStore.getState()),
+      })) return;
+      setActiveView('review-surface');
+    });
   }, [isProgramCoordinator, submissionId]);
 
   // 2026-06-07 (user-reported: "approved items not moved into the spec editor")
@@ -614,6 +653,8 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         });
       // The dashboard DRAFTS / workflow-summary also reflect approvals.
       queryClient.invalidateQueries({ queryKey: ['workflow-summary', submissionId] });
+      // Approving a numbered part's draft approves that part server-side.
+      queryClient.invalidateQueries({ queryKey: ['spec-parts', submissionId] });
     });
     return unsub;
   }, [submissionId, queryClient]);
@@ -2912,6 +2953,10 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     }}
                     submissionId={submissionId}
                     partsReadOnly={isEditingDisabled}
+                    onSelectStandardIntro={(code) => {
+                      setSelectedStandard(code);
+                      setSelectedSpec(null);
+                    }}
                   />
                 )}
               </aside>
@@ -3149,10 +3194,10 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 <h2 className="mb-1 text-lg font-semibold text-gray-900">
                   Document Introduction
                 </h2>
-                <p className="mb-4 text-sm text-gray-500">
-                  The opening narrative of your self-study — mission, program
-                  description, and terms. Content imported via the Drafts
-                  pipeline lands here; edit it freely before submitting.
+                <p className="mb-4 text-sm text-gray-500" data-testid="doc-intro-help">
+                  {isProgramCoordinator
+                    ? 'The opening narrative of your self-study — mission, program description, and terms. Content imported via the Drafts pipeline lands here; edit it freely before submitting.'
+                    : "The program's opening narrative — its mission, program description, and terms, as submitted."}
                 </p>
                 <IntroductionEditor
                   key={`doc-intro-view-${editorRefreshKey}`}

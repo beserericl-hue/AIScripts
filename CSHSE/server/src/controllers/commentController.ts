@@ -89,9 +89,14 @@ export const getCommentSummary = async (req: AuthenticatedRequest, res: Response
     }
 
     const { submissionId } = req.params;
+    // Optional scope, as the comments list takes it, so a "Comments N" counter
+    // for one standard / specification counts what the panel beside it lists.
+    const match: any = { submissionId: new mongoose.Types.ObjectId(submissionId) };
+    if (typeof req.query.standardCode === 'string' && req.query.standardCode) match.standardCode = req.query.standardCode;
+    if (typeof req.query.specCode === 'string' && req.query.specCode) match.specCode = req.query.specCode;
 
     const pipeline = [
-      { $match: { submissionId: new mongoose.Types.ObjectId(submissionId) } },
+      { $match: match },
       {
         $group: {
           _id: {
@@ -113,13 +118,16 @@ export const getCommentSummary = async (req: AuthenticatedRequest, res: Response
     const totalUnresolved = summary.reduce((acc, s) => acc + s.unresolvedCount, 0);
 
     // Get first comment location for navigation
-    const firstComment = await Comment.findOne({ submissionId })
+    const firstComment = await Comment.findOne(match)
       .sort({ standardCode: 1, specCode: 1, selectionStart: 1, createdAt: 1 })
       .lean();
 
     return res.json({
       totalComments,
       totalUnresolved,
+      // Short names the editor's toolbar counter reads.
+      total: totalComments,
+      unresolved: totalUnresolved,
       bySection: summary.map(s => ({
         standardCode: s._id.standardCode,
         specCode: s._id.specCode,

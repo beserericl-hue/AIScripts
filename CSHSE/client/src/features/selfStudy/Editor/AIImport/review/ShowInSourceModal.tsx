@@ -17,6 +17,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, AlertTriangle, Loader2, Check } from 'lucide-react';
 import { api } from '../../../../../services/api';
+
+/**
+ * Human label for the place a picked passage will go: "Standard 4 introduction",
+ * "the document introduction", or "4.a" — never the internal `_intro.standard-4`.
+ */
+export function sourceTargetLabel(std: string, spec: string): string {
+  if (std === '_intro') {
+    if (spec === 'document') return 'the document introduction';
+    const m = /^standard-(\w+)$/.exec(spec);
+    return m ? `the Standard ${m[1]} introduction` : 'the introduction';
+  }
+  return `${std}.${spec}`;
+}
 import { tableizeIfBareRows } from './tableizeHtml';
 
 interface ShowInSourceModalProps {
@@ -367,7 +380,7 @@ export function ShowInSourceModal({
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
           <h2 className="text-base font-semibold text-gray-900">
             {inSelectionMode
-              ? `Pick the source passage for ${selectionTarget!.std}.${selectionTarget!.spec}`
+              ? `Pick the source passage for ${sourceTargetLabel(selectionTarget!.std, selectionTarget!.spec)}`
               : 'Show in source'}
           </h2>
           <button

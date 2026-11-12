@@ -36,6 +36,12 @@ interface StandardsNavigationProps {
   /** Lists each spec's numbered parts (4.a.1 …) with an Approve box. */
   submissionId?: string | null;
   partsReadOnly?: boolean;
+  /**
+   * When given, each expanded standard starts with an "Introduction" row that
+   * opens that standard's introduction (selecting the standard alone always
+   * lands on its first specification).
+   */
+  onSelectStandardIntro?: (standardCode: string) => void;
 }
 
 /**
@@ -49,6 +55,7 @@ export function StandardsNavigation({
   onSelectSpec,
   submissionId,
   partsReadOnly,
+  onSelectStandardIntro,
 }: StandardsNavigationProps) {
   // Group standards by part
   const groupedStandards = useMemo(() => {
@@ -77,6 +84,7 @@ export function StandardsNavigation({
               onSelectSpec={onSelectSpec}
               submissionId={submissionId}
               partsReadOnly={partsReadOnly}
+              onSelectStandardIntro={onSelectStandardIntro}
             />
           ))}
         </div>
@@ -100,6 +108,7 @@ export function StandardsNavigation({
               onSelectSpec={onSelectSpec}
               submissionId={submissionId}
               partsReadOnly={partsReadOnly}
+              onSelectStandardIntro={onSelectStandardIntro}
             />
           ))}
         </div>
@@ -117,6 +126,7 @@ interface StandardItemProps {
   onSelectSpec: (standardCode: string, specCode: string) => void;
   submissionId?: string | null;
   partsReadOnly?: boolean;
+  onSelectStandardIntro?: (standardCode: string) => void;
 }
 
 function StandardItem({
@@ -127,6 +137,7 @@ function StandardItem({
   onSelectSpec,
   submissionId,
   partsReadOnly,
+  onSelectStandardIntro,
 }: StandardItemProps) {
   const [isExpanded, setIsExpanded] = React.useState(isSelected);
 
@@ -206,6 +217,19 @@ function StandardItem({
       {/* Specifications List */}
       {isExpanded && standard.specifications.length > 0 && (
         <div className="ml-4 pl-4 border-l-2 border-gray-200 space-y-1 pb-2">
+          {onSelectStandardIntro && (
+            <button
+              type="button"
+              data-testid={`nav-standard-intro-${standard.standardCode}`}
+              aria-current={isSelected && selectedSpec === null ? 'true' : undefined}
+              onClick={() => onSelectStandardIntro(standard.standardCode)}
+              className={`w-full text-left px-2 py-1.5 rounded text-sm italic transition-colors ${
+                isSelected && selectedSpec === null ? 'bg-teal-50 text-teal-800 font-medium' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Standard {standard.standardCode} introduction
+            </button>
+          )}
           {standard.specifications.map((spec) => (
             <div key={spec.specCode}>
               <SpecificationItem
