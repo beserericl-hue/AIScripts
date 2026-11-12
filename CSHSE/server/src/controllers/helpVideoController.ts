@@ -17,7 +17,14 @@
  */
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { downloadFileAsBuffer, downloadFileRange, isS3Configured } from '../services/s3Service';
+import * as s3 from '../services/s3Service';
+
+/** Storage used by the handlers — S3 by default; swappable in tests. */
+let storage: Pick<typeof s3, 'downloadFileAsBuffer' | 'downloadFileRange' | 'isS3Configured'> = s3;
+export function _setHelpVideoStorage(impl: typeof storage | null): void {
+  storage = impl || s3;
+  cache = null;
+}
 
 export const HELP_VIDEO_PREFIX = 'help-videos/';
 const MANIFEST_KEY = `${HELP_VIDEO_PREFIX}manifest.json`;
@@ -47,9 +54,9 @@ export function _resetHelpVideoManifestCache(): void {
 export async function loadHelpVideoManifest(): Promise<HelpVideoManifest> {
   if (cache && Date.now() - cache.at < MANIFEST_TTL_MS) return cache.manifest;
   let manifest: HelpVideoManifest = { videos: {} };
-  if (isS3Configured()) {
+  if (storage.isS3Configured()) {
     try {
-      const buf = await downloadFileAsBuffer(MANIFEST_KEY);
+      const buf = await storage.downloadFileAsBuffer(MANIFEST_KEY);
       const parsed = JSON.parse(buf.toString('utf8'));
       if (parsed && typeof parsed.videos === 'object') manifest = { videos: parsed.videos };
     } catch (err: any) {
@@ -125,7 +132,7 @@ export async function serveHelpVideoFile(req: Request, res: Response): Promise<v
   }
   try {
     const range = typeof req.headers.range === 'string' && /^bytes=\d*-\d*$/.test(req.headers.range) ? req.headers.range : undefined;
-    const obj = await downloadFileRange(tok.key, range);
+    const obj = await storage.downloadFileRange(tok.key, range);
     const type = tok.kind === 'pdf' ? 'application/pdf' : obj.contentType && obj.contentType !== 'application/octet-stream' ? obj.contentType : 'video/mp4';
     res.status(obj.partial ? 206 : 200);
     res.setHeader('Content-Type', type);
