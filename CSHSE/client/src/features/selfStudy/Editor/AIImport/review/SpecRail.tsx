@@ -10,14 +10,13 @@
  */
 import React, { useMemo, useState } from 'react';
 import { scrollInPanel, resetHiddenFrames } from '../../../../../lib/scrollInPanel';
-import { Search, AlertTriangle, FileText, Grid3x3, BookOpen, User, FileBox } from 'lucide-react';
+import { Search, AlertTriangle, FileText, BookOpen, User, FileBox } from 'lucide-react';
 import { HoverTooltip } from './HoverTooltip';
 import { SpecPartsBadge, SpecPartsList } from '../../../SpecParts/SpecPartsList';
 import type {
   SpecBucket,
   PlaceholderSection,
   Tag,
-  MatrixData,
   IntroductionBucket,
   CVItem,
   EvidenceDocItem
@@ -46,7 +45,6 @@ export function openPartCard(specKey: string, n: number, onSelect: (key: string)
   window.setTimeout(find, 50);
 }
 export const UNWRITTEN_KEY = '_unwritten';
-export const MATRICES_KEY = '_matrices';
 // CR-033 / CR-040 — synthetic rail keys for detector outputs.
 export const CVS_KEY = '_cvs';
 export const EVIDENCE_DOCS_KEY = '_evidence-docs';
@@ -70,7 +68,6 @@ interface SpecRailProps {
   buckets: Record<string, SpecBucket>;
   tags: Tag[];
   placeholders: PlaceholderSection[];
-  matrices: MatrixData[];
   selectedKey: string | null;
   onSelect: (key: string) => void;
   // CR-039 — Introduction buckets keyed by 'document' / 'standard-{N}'.
@@ -206,15 +203,13 @@ export function coverageReason(b: SpecBucket): string {
 }
 
 function bucketCount(b: SpecBucket): number {
-  const mc = (b as any).matrixCells?.length || 0;
-  return b.narratives.length + b.evidenceText.length + b.evidenceFiles.length + mc;
+  return b.narratives.length + b.evidenceText.length + b.evidenceFiles.length;
 }
 
 export function SpecRail({
   buckets,
   tags,
   placeholders,
-  matrices,
   selectedKey,
   onSelect,
   introductions,
@@ -455,45 +450,6 @@ export function SpecRail({
                   }`}
                 >
                   {paperCount}
-                </span>
-              </button>
-            </li>
-            {/* Matrices sub-tile — ALWAYS visible like the other file
-                types (post-release feedback 2026-06-13: coordinators expect
-                "CV, Syllabi, Projects, Matrices" listed together). The count
-                comes from aiMatrixState.matrices, which the server rebuilds
-                from the durable CurriculumMatrix / SelfStudyImport sources so
-                imported matrices never silently drop off this list. */}
-            <li>
-              <button
-                role="tab"
-                data-tour="review-matrices"
-                data-testid="rail-matrices"
-                aria-selected={selectedKey === MATRICES_KEY}
-                onClick={() => onSelect(MATRICES_KEY)}
-                title={
-                  matrices.length > 0
-                    ? `${matrices.length} curriculum matrix(es): ${matrices.map((m) => m.name).join(', ')}`
-                    : 'Curriculum matrices detected at import. None surfaced for this submission yet.'
-                }
-                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
-                  selectedKey === MATRICES_KEY
-                    ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
-                    : 'hover:bg-gray-100 text-gray-700'
-                }`}
-              >
-                <span className="flex items-center gap-1.5">
-                  <Grid3x3 className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
-                  <span className="font-medium">Matrices</span>
-                </span>
-                <span
-                  className={`rounded px-1.5 text-xs ${
-                    matrices.length > 0
-                      ? 'bg-cshse-200 text-cshse-800'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}
-                >
-                  {matrices.length}
                 </span>
               </button>
             </li>

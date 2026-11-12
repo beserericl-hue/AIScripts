@@ -130,7 +130,6 @@ export const addManualChecklistItem = async (req: AuthenticatedRequest, res: Res
         $set: {
           inclusionReason,
           source: 'manual',
-          finalScoreAtInclusion: 0,
           addedByName: _actorName(req),
           ...(note ? { verificationNote: note } : {})
         },

@@ -15,7 +15,7 @@ import type { SpecBucket } from '../../../../../store/aiImportStore';
 
 const bucket = (standardCode: string, specCode: string): SpecBucket => ({
   standardCode, specCode, standardTitle: 'Program Evaluation', specPrompt: 'p',
-  narratives: [], evidenceText: [], evidenceFiles: [], matrixCells: [],
+  narratives: [], evidenceText: [], evidenceFiles: [],
   coverageScore: null, coverageCovered: null, coverageGaps: [], coverageStrengths: [],
 });
 
@@ -25,7 +25,7 @@ function renderRail() {
     <QueryClientProvider client={qc}>
       <SpecRail
         buckets={{ '4.a': bucket('4', 'a'), '4.d': bucket('4', 'd') }}
-        tags={[]} placeholders={[]} matrices={[]} selectedKey={null} onSelect={() => {}}
+        tags={[]} placeholders={[]} selectedKey={null} onSelect={() => {}}
         submissionId="sub1"
       />
     </QueryClientProvider>

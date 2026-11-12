@@ -97,7 +97,9 @@ class CoverageReport:
     sections_to_introductions: int
     sections_to_cvs: int
     sections_to_evidence_docs: int
-    sections_to_matrices: int
+    # Sections deliberately NOT indexed (e.g. a curriculum matrix, which is
+    # not part of the self-study) — accounted for, never missing.
+    sections_excluded: int = 0
     missing_fragments: list[MissingFragment] = field(default_factory=list)
     # CR-040 Phase 3b additions:
     # Byte-level census uses word_count as the size unit (after the
@@ -132,7 +134,7 @@ class CoverageReport:
             "sectionsToIntroductions": self.sections_to_introductions,
             "sectionsToCVs": self.sections_to_cvs,
             "sectionsToEvidenceDocs": self.sections_to_evidence_docs,
-            "sectionsToMatrices": self.sections_to_matrices,
+            "sectionsExcluded": self.sections_excluded,
             "coveragePercent": self.coverage_percent,
             # CR-040 Phase 3b wire fields.
             "bytesTotal": self.bytes_total,
@@ -263,7 +265,7 @@ def verify_coverage(
     intro_section_ids: Iterable[str],
     cv_section_ids: Iterable[str],
     evidence_doc_section_ids: Iterable[str],
-    matrix_section_ids: Iterable[str] = (),
+    excluded_section_ids: Iterable[str] = (),
     snippet_chars: int = 200,
 ) -> CoverageReport:
     """Walk every input section and classify it into a destination.
@@ -279,8 +281,8 @@ def verify_coverage(
     intros = set(intro_section_ids)
     cvs = set(cv_section_ids)
     evidence_docs = set(evidence_doc_section_ids)
-    matrices = set(matrix_section_ids)
-    assigned_anywhere = bucketed | tagged | intros | cvs | evidence_docs | matrices
+    excluded = set(excluded_section_ids)
+    assigned_anywhere = bucketed | tagged | intros | cvs | evidence_docs | excluded
 
     missing: list[MissingFragment] = []
     skip_breakdown: dict[str, int] = {}
@@ -320,7 +322,7 @@ def verify_coverage(
         sections_to_introductions=len(intros),
         sections_to_cvs=len(cvs),
         sections_to_evidence_docs=len(evidence_docs),
-        sections_to_matrices=len(matrices),
+        sections_excluded=len(excluded),
         missing_fragments=missing,
         bytes_total=bytes_total,
         bytes_assigned=bytes_assigned,

@@ -5,7 +5,6 @@ export type DocumentKind =
   | 'original_import'   // raw DOCX/PDF the coordinator uploaded
   | 'parsed_html'       // HTML produced by the parser
   | 'reader_report'     // DOCX generated from CSHSE reader-report template
-  | 'matrix_template'   // curriculum matrix DOCX template
   | 'spec_document';    // CSHSE specification PDF (Standards by program level)
 
 export interface IDocumentVersion extends Document {
@@ -68,7 +67,6 @@ const DocumentVersionSchema = new Schema<IDocumentVersion>(
         'original_import',
         'parsed_html',
         'reader_report',
-        'matrix_template',
         'spec_document',
       ],
     },

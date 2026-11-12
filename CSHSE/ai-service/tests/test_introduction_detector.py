@@ -49,7 +49,7 @@ def _section(id_: str, heading: str, body: str = "") -> Section:
         ("Foreword", True),
         # NOT intros:
         ("Standard 1.a Institutional Requirements", False),
-        ("Curriculum Matrix", False),
+        ("Program Requirements", False),
         ("Course Catalog", False),
         ("Personnel — Faculty Credentials", False),
         ("", False),

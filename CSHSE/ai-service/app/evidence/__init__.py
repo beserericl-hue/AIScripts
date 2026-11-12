@@ -10,7 +10,7 @@ Phase 2 (open):
   - ``recommend`` — RAG retrieval for a given spec; returns top-k
     matching evidence chunks with institutionId payload filter.
   - ``score`` — Claude Haiku adjudication of evidence-vs-spec match;
-    returns confidence + rationale + matrix-row references when present.
+    returns confidence + rationale + chunk citations.
 
 Each endpoint will reuse cshse-ai's HMAC service-to-service auth,
 per-env Qdrant collection naming, and per-institution payload filter

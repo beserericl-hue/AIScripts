@@ -27,8 +27,8 @@ import mongoose from 'mongoose';
 import JSZip from 'jszip';
 import { Submission } from '../models/Submission';
 import { ValidationResult } from '../models/ValidationResult';
-import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SupportingEvidence } from '../models/SupportingEvidence';
+import { notCurriculumMatrixFilter } from './curriculumMatrixExclusion';
 import { getAllStandards } from '../data/standards';
 import { getLevelStandards, getSpecParts } from '../data/levelStandards';
 import { INTRO_RUBRIC, INTRO_STANDARD_CODE } from '../data/introRubric';
@@ -133,7 +133,6 @@ export interface ReaderReportExtras {
 }
 export const VOTE_OPTIONS: Array<[string, string]> = [
   ['accept', 'Accreditation with no conditions.'],
-  ['conditional', 'Conditional accreditation because the program had a few noncompliance issues that require correction.'],
   ['deny', 'Deny accreditation due to significant noncompliance.'],
   ['hold', 'Hold a decision.'],
 ];
@@ -167,10 +166,9 @@ interface ReportData {
   institutionName: string; programName: string; programLevel: string;
   submittedAt?: Date;
   standards: Array<{ code: string; title: string; specs: SpecBlock[] }>;
-  matrices: Array<{ title: string; text: string }>;
 }
 
-/** Gather the full self-study + AI verdicts + matrices. */
+/** Gather the full self-study + AI verdicts. */
 async function gatherReportData(submissionId: string): Promise<ReportData> {
   const submission: any = await Submission.findById(submissionId);
   const narratives: any = submission?.narratives;
@@ -223,18 +221,12 @@ async function gatherReportData(submissionId: string): Promise<ReportData> {
     standards.push({ code: std.code, title: std.title || '', specs });
   }
 
-  const cms: any[] = await CurriculumMatrix.find({ submissionId }).lean();
-  const matrices: ReportData['matrices'] = [];
-  for (const cm of cms) for (const rc of cm.rawContent || []) {
-    matrices.push({ title: rc.title || cm.name || 'Curriculum Matrix', text: stripHtml(rc.content) });
-  }
-
   return {
     institutionName: submission?.institutionName || 'Institution',
     programName: submission?.programName || '',
     programLevel: submission?.programLevel || '',
     submittedAt: submission?.submittedAt,
-    standards, matrices,
+    standards,
   };
 }
 
@@ -359,7 +351,6 @@ async function buildTemplatedDocx(
 // form draws its boxes differently, so it relies on the recommendation block.
 const VOTE_BOX_LABEL: Record<string, string> = {
   accept: 'Accreditation with no conditions',
-  conditional: 'Conditional accreditation because',
   deny: 'Deny accreditation due',
   hold: 'Hold a decision',
 };
@@ -476,7 +467,7 @@ async function buildProceduralDocx(data: ReportData, rollup: Map<string, Standar
   }
   children.push(new Paragraph({ children: [new TextRun('')] }));
   children.push(new Paragraph({ children: [new TextRun({ text: 'Recommendation to the Council:', bold: true })] }));
-  children.push(new Paragraph({ children: [new TextRun('☐ Accreditation with no conditions   ☐ Conditional accreditation   ☐ Deny accreditation   ☐ Hold a decision')] }));
+  children.push(new Paragraph({ children: [new TextRun('☐ Accreditation with no conditions   ☐ Deny accreditation   ☐ Hold a decision')] }));
   children.push(new Paragraph({ children: [new TextRun('Self-Study Reader Signature: ____________________    Date: ____________')] }));
   const doc = new Document({ sections: [{ properties: {}, ...brandedSectionChrome(), children }] } as any);
   return Packer.toBuffer(doc);
@@ -585,17 +576,6 @@ function buildChecklistPdf(
         }
       }
       doc.moveDown(0.5);
-    }
-
-    if (data.matrices.length) {
-      doc.addPage();
-      doc.fontSize(13).fillColor('#0f766e').text('Curriculum Matrices');
-      doc.moveDown(0.3);
-      for (const m of data.matrices) {
-        doc.fontSize(11).fillColor('#111827').text(m.title);
-        doc.fontSize(8).fillColor('#374151').text(m.text, { paragraphGap: 3 });
-        doc.moveDown(0.4);
-      }
     }
 
     doc.addPage();
@@ -870,7 +850,8 @@ export async function getReaderReportStructure(submissionId: string): Promise<Re
   const { cfg } = resolveLevel(data.programLevel);
   // Count Supporting-Evidence items (files / URLs / CVs / syllabi / projects)
   // per standard.spec so each spec can show an "Open files in library" button.
-  const evDocs: any[] = await SupportingEvidence.find({ submissionId, isDeleted: { $ne: true } })
+  // A curriculum-matrix document is not part of the self-study — never counted.
+  const evDocs: any[] = await SupportingEvidence.find({ submissionId, isDeleted: { $ne: true }, ...notCurriculumMatrixFilter() })
     .select('standardCode specCode').lean();
   const evCount = new Map<string, number>();
   for (const e of evDocs) {

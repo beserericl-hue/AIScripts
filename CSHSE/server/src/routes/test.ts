@@ -210,7 +210,6 @@ export function buildTestRouter(): Router | null {
     // so multi-import lifecycle specs can land on the Self-Study Editor
     // toolbar's Review surface with merged items from N synthetic imports.
     const reviewStateSpec = (merged.reviewState ?? null) as Record<string, unknown> | null;
-    const matrixStateSpec = (merged.matrixState ?? null) as Record<string, unknown> | null;
 
     // Stamp a unique token onto the email so reruns don't collide.
     const stamp = crypto.randomBytes(4).toString('hex');
@@ -334,7 +333,6 @@ export function buildTestRouter(): Router | null {
         aiBuckets: importSpec.aiBuckets ?? {},
         aiTags: importSpec.aiTags ?? [],
         aiPlaceholderSections: importSpec.aiPlaceholderSections ?? [],
-        aiMatrices: importSpec.aiMatrices ?? [],
         aiStages: importSpec.aiStages ?? [],
         // CR-043 cutover-clear coverage — let fixtures seed the remaining
         // pre-CR-043 fields so AC#13/14 tests can verify they get wiped.
@@ -363,21 +361,12 @@ export function buildTestRouter(): Router | null {
       // onto the submission. lastUpdatedAt is forced to "now" so the
       // wizard's read-through cache picks the fixture over any stale
       // localStorage value.
-      if (reviewStateSpec || matrixStateSpec) {
-        if (reviewStateSpec) {
-          (submissionDoc as any).aiReviewState = {
-            ...reviewStateSpec,
-            lastUpdatedAt: new Date()
-          };
-          (submissionDoc as any).markModified('aiReviewState');
-        }
-        if (matrixStateSpec) {
-          (submissionDoc as any).aiMatrixState = {
-            ...matrixStateSpec,
-            lastUpdatedAt: new Date()
-          };
-          (submissionDoc as any).markModified('aiMatrixState');
-        }
+      if (reviewStateSpec) {
+        (submissionDoc as any).aiReviewState = {
+          ...reviewStateSpec,
+          lastUpdatedAt: new Date()
+        };
+        (submissionDoc as any).markModified('aiReviewState');
         await submissionDoc.save();
       }
 
@@ -419,7 +408,6 @@ export function buildTestRouter(): Router | null {
             aiBuckets: child.aiBuckets ?? {},
             aiTags: child.aiTags ?? [],
             aiPlaceholderSections: child.aiPlaceholderSections ?? [],
-            aiMatrices: child.aiMatrices ?? [],
             aiStages: child.aiStages ?? [],
             aiCVs: child.aiCVs ?? [],
             aiEvidenceDocs: child.aiEvidenceDocs ?? [],
@@ -485,10 +473,9 @@ export function buildTestRouter(): Router | null {
       buckets: importSpec.aiBuckets ?? {},
       tags: importSpec.aiTags ?? [],
       placeholderSections: importSpec.aiPlaceholderSections ?? [],
-      matrices: importSpec.aiMatrices ?? [],
       // CR-033 / CR-040 / CR-039 — detector outputs the rail surfaces
       // as standalone entries. The auto-state previously only carried
-      // buckets+tags+matrices, so seed fixtures that set aiCVs /
+      // buckets+tags, so seed fixtures that set aiCVs /
       // aiEvidenceDocs / aiIntroductions on the SelfStudyImport had
       // them DROPPED on the way into Zustand (the wizard's localStorage
       // hydration is the source of truth for the rail render).
@@ -497,7 +484,6 @@ export function buildTestRouter(): Router | null {
       introductions: importSpec.aiIntroductions ?? {
         document: { scope: 'document', standardCode: null, items: [] }
       },
-      matrixRowEdits: {},
       // CR-034: dirty=true so the wizard's _applySnapshot guard preserves
       // the seeded buckets (and any subsequent user edits) instead of
       // overwriting them with whatever /ai-status returns from the server.

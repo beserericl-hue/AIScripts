@@ -72,8 +72,19 @@ interface Evidence {
 // Map the import "kind:" tag to a human label for files whose original name is
 // junk (e.g. a numeric import-row label like "4." → "4..docx").
 const KIND_LABEL: Record<string, string> = {
-  syllabus: 'Syllabus', cv: 'CV', paper: 'Paper', project: 'Project', file: 'Document', matrix: 'Curriculum matrix',
+  syllabus: 'Syllabus', cv: 'CV', paper: 'Paper', project: 'Project', file: 'Document',
 };
+
+// CSHSE board decision (Nov 2026): the curriculum matrix is a prep tool outside
+// the self-study. A matrix file uploaded anyway stays in the library (the PC
+// can still download/delete it) but the server tags it with this tag and leaves
+// it unassigned: it is never indexed, assigned, AI-placed or counted as an
+// unassigned file that blocks submit.
+export const EXCLUDED_MATRIX_TAG = 'excluded:curriculum-matrix';
+export const EXCLUDED_MATRIX_LABEL = 'Curriculum matrix — not part of the self-study';
+export function isExcludedFromSelfStudy(item: { tags?: string[] }): boolean {
+  return (item.tags || []).some((t) => String(t) === EXCLUDED_MATRIX_TAG);
+}
 
 /** A readable file name: the real originalName, or — when that's just a number/
  *  letter from an import row — a label derived from its kind + standard. */
@@ -184,9 +195,15 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
   // auto-generated Reader Report PDF/DOCX (no standardCode, but not stray
   // uploads — the submit gate ignores them too).
   const unassignedItems = useMemo(
-    () => allEvidence.filter((e) => !e.standardCode && !(e.tags || []).some((t) => String(t).startsWith('reader-report'))),
+    () => allEvidence.filter((e) =>
+      !e.standardCode &&
+      !isExcludedFromSelfStudy(e) &&
+      !(e.tags || []).some((t) => String(t).startsWith('reader-report'))),
     [allEvidence]
   );
+  // Files kept in the library but excluded from the self-study (see
+  // EXCLUDED_MATRIX_TAG) — listed in their own section, never as Unassigned.
+  const excludedItems = useMemo(() => allEvidence.filter(isExcludedFromSelfStudy), [allEvidence]);
   const unassignedCount = unassignedItems.length;
 
   // Honour a deep-link request to show only the unassigned files (from the
@@ -214,6 +231,7 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
     const source = assignmentFilter === 'unassigned' ? unassignedItems : allEvidence;
     const grouped: Record<string, Record<string, Evidence[]>> = {};
     for (const item of source) {
+      if (isExcludedFromSelfStudy(item)) continue; // rendered in its own section
       const std = item.standardCode || 'unassigned';
       const spec = item.specCode || 'general';
       if (!grouped[std]) grouped[std] = {};
@@ -593,10 +611,12 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
         ? item.url?.title || 'Untitled Link'
         : (item.file ? prettyFileName(item) : 'Untitled File');
     const desc = getDescription(item);
+    const excluded = isExcludedFromSelfStudy(item);
 
     return (
       <div
         key={item._id}
+        data-testid={`file-row-${item._id}`}
         className="flex items-center justify-between py-2 px-3 hover:bg-gray-50 rounded group"
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -652,10 +672,15 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
                 </span>
               )}
             </div>
+            {excluded && (
+              <p className="mt-0.5 text-xs font-medium text-gray-600" data-testid={`excluded-label-${item._id}`}>
+                {EXCLUDED_MATRIX_LABEL}
+              </p>
+            )}
             {desc && (
               <p className="text-xs text-gray-500 truncate mt-0.5">{desc}</p>
             )}
-            {!item.standardCode && item.metadata?.aiPlacement && (() => {
+            {!excluded && !item.standardCode && item.metadata?.aiPlacement && (() => {
               const ai = item.metadata!.aiPlacement!;
               const pct = typeof ai.confidence === 'number' ? Math.round(ai.confidence * 100) : null;
               if (ai.kind === 'working_file') {
@@ -725,8 +750,9 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
           )}
           {/* Assign / change the Standard for this file directly in the library.
               Essential for files that never appeared in the Review panel (bulk
-              or direct uploads the matcher couldn't place). */}
-          {!readOnly && (
+              or direct uploads the matcher couldn't place). Never offered for a
+              file excluded from the self-study. */}
+          {!readOnly && !excluded && (
             assignFor === item._id ? (
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-1">
@@ -1029,6 +1055,40 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
               );
             })()}
             {unassignedFiles.map(renderEvidenceItem)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Files kept in the library but excluded from the self-study (a curriculum
+  // matrix — see EXCLUDED_MATRIX_TAG). No Assign / AI actions; download,
+  // preview and delete only.
+  const renderExcludedAccordion = () => {
+    if (assignmentFilter === 'unassigned' || excludedItems.length === 0) return null;
+    const isExpanded = expandedStandards.has('excluded');
+    return (
+      <div key="excluded" className="border border-gray-200 rounded-lg overflow-hidden" data-testid="file-library-excluded">
+        <button
+          onClick={() => toggleStandard('excluded')}
+          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors whitespace-nowrap"
+        >
+          {isExpanded ? (
+            <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
+          )}
+          <span className="text-sm font-semibold text-gray-700 flex-shrink-0">Not part of the self-study</span>
+          <span className="text-sm text-gray-500 truncate flex-1">
+            Kept in the library only — not reviewed or assigned to a Standard
+          </span>
+          <span className="flex-shrink-0 text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full whitespace-nowrap">
+            {excludedItems.length} file{excludedItems.length !== 1 ? 's' : ''}
+          </span>
+        </button>
+        {isExpanded && (
+          <div className="px-4 pb-4 pt-3 border-t border-gray-100">
+            {excludedItems.map(renderEvidenceItem)}
           </div>
         )}
       </div>
@@ -1507,6 +1567,8 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
             {renderUnassignedAccordion()}
             {/* Introduction — files referenced in the program introduction */}
             {renderIntroductionAccordion()}
+            {/* Kept in the library but excluded from the self-study */}
+            {renderExcludedAccordion()}
             {/* Part I */}
             <div className="mb-4">
               <h3 className="text-xs font-bold uppercase text-gray-400 tracking-wider mb-2 px-1">

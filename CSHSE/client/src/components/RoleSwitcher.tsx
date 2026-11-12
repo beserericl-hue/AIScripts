@@ -6,6 +6,7 @@ const ROLE_LABEL: Record<string, string> = {
   program_coordinator: 'Program Coordinator',
   reader: 'Reader',
   lead_reader: 'Lead Reader',
+  board: 'Board',
 };
 
 /**

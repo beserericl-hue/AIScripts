@@ -32,6 +32,31 @@ export interface RoleBearer {
   isSuperuser?: boolean;
   realIsSuperuser?: boolean;
   roleAssignments?: RoleAssignmentLike[] | null;
+  isBoardMember?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// CSHSE Board. Board membership is GLOBAL (CSHSE-wide, not tied to an
+// institution) and READ-ONLY — a board session may only list / open / download
+// COMPLETED Lead Reader Reports. It is held either as the primary `role:
+// 'board'` (board-only users) or as `isBoardMember: true` on a user who also
+// holds institution roles. In the role switcher it is the pseudo-assignment
+// "Board · CSHSE" (BOARD_CONTEXT_INSTITUTION_ID is not a real Institution id).
+// ---------------------------------------------------------------------------
+export const BOARD_ROLE = 'board';
+export const BOARD_CONTEXT_INSTITUTION_ID = 'cshse';
+export const BOARD_CONTEXT_INSTITUTION_NAME = 'CSHSE';
+
+/** Does this user HOLD board membership (whatever role they are acting as)? */
+export function isBoardMember(u: RoleBearer | null | undefined): boolean {
+  if (!u) return false;
+  return u.isBoardMember === true || u.role === BOARD_ROLE;
+}
+
+/** Is the CURRENT session acting as the board (effective role after the role
+ *  switcher / impersonation)? Every board-only endpoint gates on this. */
+export function isBoardSession(u: RoleBearer | null | undefined): boolean {
+  return !!u && u.role === BOARD_ROLE;
 }
 
 const SCOPED_ROLES: ReadonlySet<string> = new Set(['program_coordinator', 'reader', 'lead_reader']);
@@ -201,6 +226,12 @@ export function resolveActiveContext(
 ): { role: string; institutionId: string; institutionName?: string } | null {
   const r = typeof role === 'string' ? role.trim() : '';
   const inst = idStr(institutionId).trim();
+  // Board · CSHSE — selectable only by a user who actually holds board membership.
+  if (u && r === BOARD_ROLE && inst === BOARD_CONTEXT_INSTITUTION_ID) {
+    return isBoardMember(u)
+      ? { role: BOARD_ROLE, institutionId: BOARD_CONTEXT_INSTITUTION_ID, institutionName: BOARD_CONTEXT_INSTITUTION_NAME }
+      : null;
+  }
   if (!u || !r || !inst || !SCOPED_ROLES.has(r)) return null;
   const match = effectiveAssignments(u).find((a) => String(a.role) === r && idStr(a.institutionId) === inst);
   if (!match) return null;

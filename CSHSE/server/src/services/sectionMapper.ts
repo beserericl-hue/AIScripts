@@ -210,11 +210,6 @@ const CONTENT_TYPE_PATTERNS = {
     /meets\s*expectations/i,
     /below\s*expectations/i,
     /exceeds\s*expectations/i
-  ],
-  matrix: [
-    /curriculum\s*matrix/i,
-    /course\s*mapping/i,
-    /[ITKS]\s*[,/]\s*[LMH]/i
   ]
 };
 
@@ -344,18 +339,6 @@ export class SectionMapperService {
       ...table.rows.flat()
     ].join(' ').toLowerCase();
 
-    // Check for curriculum matrix
-    if (table.tableType === 'curriculum_matrix' || this.isCurriculumMatrix(allText)) {
-      return {
-        sectionId: table.id,
-        suggestedStandardCode: '11',
-        suggestedSpecCode: 'matrix',
-        confidence: 0.9,
-        matchedPatterns: ['curriculum matrix'],
-        alternativeSuggestions: []
-      };
-    }
-
     // Check for grading scale
     if (table.tableType === 'grading_scale' || this.isGradingScale(allText)) {
       return {
@@ -394,19 +377,6 @@ export class SectionMapperService {
       }
     }
     return null;
-  }
-
-  /**
-   * Check if text represents a curriculum matrix
-   */
-  private isCurriculumMatrix(text: string): boolean {
-    const patterns = [
-      /chs\s*\d{3}/i,
-      /[ITKS]\s*[,/]?\s*[LMH]/i,
-      /course\s*(code|number)/i,
-      /standard\s*\d+/i
-    ];
-    return patterns.filter(p => p.test(text)).length >= 2;
   }
 
   /**

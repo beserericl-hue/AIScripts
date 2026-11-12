@@ -66,7 +66,7 @@ export interface ISelfStudyProgress {
 }
 
 // CR-053 / Sprint 7.1 — Board decisions. The board reviews the lead-
-// reader's compilation + reader scores + site-visit verification and
+// reader's compilation + reader marks + site-visit verification and
 // stamps one of these outcomes. The legacy 3-outcome enum
 // (approve / deny / conditional) is preserved for back-compat with
 // pre-Sprint-7 records; new decisions use one of the five values
@@ -139,12 +139,6 @@ export interface IAIReviewState {
   lastUpdatedAt: Date;
 }
 
-export interface IAIMatrixState {
-  matrices: any[];
-  matrixRowEdits: Record<string, any>;  // CR-026 row controls
-  lastUpdatedAt: Date;
-}
-
 export interface IReaderLock {
   isLocked: boolean;
   lockedBy?: mongoose.Types.ObjectId;
@@ -181,7 +175,6 @@ export interface ISubmission extends Document {
   selfStudyProgress: ISelfStudyProgress;
   standardsStatus: Map<string, IStandardStatusInfo>;
   imports: mongoose.Types.ObjectId[];
-  curriculumMatrices: mongoose.Types.ObjectId[];
   // CR-039 — Standard-level + document-level Introductions written by the
   // wizard's apply step. Kept as opaque HTML strings (same shape as
   // narratives' content) so the existing TipTap editor surface can render
@@ -194,14 +187,11 @@ export interface ISubmission extends Document {
   // close, browser refresh, multi-author multi-file imports. Replaces
   // the prior wizard-Zustand-scoped state which got wiped on every new
   // import. Items here are pre-Apply; once approved they flow into
-  // narratives + curriculumMatrices and leave aiReviewState.
+  // narratives + supporting evidence and leave aiReviewState.
   aiReviewState?: IAIReviewState;
   // Approvals of a specification's numbered parts (4.a.1 …), shared by the
   // Review rail and the Editor: { "<std>_<spec>": { "<n>": { approvedBy, approvedAt } } }.
   specPartApprovals?: Record<string, Record<string, { approvedBy?: string; approvedAt?: Date }>>;
-  // CR-043 — submission-scoped pre-Apply matrix state. Separate from
-  // the post-Apply curriculumMatrices array.
-  aiMatrixState?: IAIMatrixState;
   // 2026-06-09 — background AI-evaluation queue. "Validate all" / "Approve all"
   // enqueue every spec-with-content here as "std.spec" keys; a background worker
   // drains it in small batches (calls cshse-ai) so the UI never blocks. Total +
@@ -381,7 +371,6 @@ const SubmissionSchema = new Schema<ISubmission>({
   // parse-complete.
   aiReviewState: { type: Schema.Types.Mixed, default: undefined },
   specPartApprovals: { type: Schema.Types.Mixed, default: undefined },
-  aiMatrixState: { type: Schema.Types.Mixed, default: undefined },
   // Background AI-evaluation queue (see interface).
   aiEvalQueue: { type: [String], default: undefined },
   aiEvalQueueTotal: { type: Number, default: undefined },
@@ -424,10 +413,6 @@ const SubmissionSchema = new Schema<ISubmission>({
   imports: [{
     type: Schema.Types.ObjectId,
     ref: 'SelfStudyImport'
-  }],
-  curriculumMatrices: [{
-    type: Schema.Types.ObjectId,
-    ref: 'CurriculumMatrix'
   }],
 
   // Reader lock for preventing program coordinator edits during review

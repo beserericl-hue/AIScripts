@@ -84,6 +84,7 @@ router.post('/login', async (req: Request, res: Response) => {
         institutionName: user.institutionName,
         permissions: user.permissions,
         isSuperuser: user.isSuperuser,
+        isBoardMember: (user as any).isBoardMember === true || user.role === 'board',
         // Multi-role users need their assignments straight after login so the
         // header role switcher is available without waiting for /me.
         roleAssignments: (user.roleAssignments || []).map((a: any) => ({
@@ -295,6 +296,7 @@ router.get('/me', async (req: Request, res: Response) => {
         status: user.status,
         lastLogin: user.lastLogin,
         isSuperuser: user.isSuperuser,
+        isBoardMember: (user as any).isBoardMember === true || user.role === 'board',
         // CR-045 — per-user UI preferences. A missing field defaults to
         // the clean single-importer toolbar (hideLegacyImporter: true).
         // CR-052 — tours map keyed by tour name. Empty object when absent.

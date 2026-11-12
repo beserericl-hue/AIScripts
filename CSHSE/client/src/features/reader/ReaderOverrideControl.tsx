@@ -157,7 +157,6 @@ export function ReaderOverrideControl({
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['spec-evaluation', submissionId, standardCode, specCode] });
-      void qc.invalidateQueries({ queryKey: ['reader-scores', submissionId] });
     },
   });
 

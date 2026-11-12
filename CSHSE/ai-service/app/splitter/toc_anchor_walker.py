@@ -15,7 +15,7 @@ that follow the template (the vast majority of CSHSE self-studies do):
 
 The AI matcher still has a role for:
   - Sections that AREN'T anchored (appendices, supporting evidence)
-  - Section-type classification (narrative vs supporting evidence vs matrix)
+  - Section-type classification (narrative vs supporting evidence)
   - Drift detection (anchor says 1.d but content has moved to 2.a in new spec)
 """
 from __future__ import annotations
@@ -27,6 +27,7 @@ from typing import Optional
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 
+from app.splitter.curriculum_matrix_exclusion import is_curriculum_matrix_anchor
 from app.splitter.sections import Section, _heuristic_flags
 
 
@@ -36,24 +37,22 @@ from app.splitter.sections import Section, _heuristic_flags
 #   #S8beval, #S19h               → standard with extended letter (8.b "eval" variant)
 _SUBSPEC_ANCHOR_RE = re.compile(r"^S(\d{1,2})([a-h])(?:[a-z]+)?$", re.IGNORECASE)
 _STANDARD_ANCHOR_RE = re.compile(r"^Standard(\d{1,2})$", re.IGNORECASE)
-# Matrix-specific anchors
-_MATRIX_ANCHOR_NAMES = {"MatrixHSR", "Matrix2", "Matrix3", "Matrix4"}
 
 
 @dataclass
 class TocEntry:
     anchor: str             # raw anchor name without '#'
     standard_code: str      # e.g. "1", "11"
-    spec_code: str          # e.g. "a", "b" — or "*matrix" for matrix anchors
+    spec_code: str          # e.g. "a", "b" ("" for an excluded anchor)
     label: str              # human-readable label from the TOC link text
-    kind: str               # "subspec" | "matrix" | "appendix" | "intro"
+    kind: str               # "subspec" | "intro" | "excluded"
 
 
 def parse_toc(soup: BeautifulSoup) -> dict[str, TocEntry]:
     """Walk the doc's <a href="#..."> links and infer a TocEntry per anchor.
 
     Returns ``{anchor_name: TocEntry}``. Anchors that don't map to a standard /
-    spec / matrix are omitted (they're usually intro or appendix anchors).
+    spec are omitted (they're usually intro or appendix anchors).
     """
     result: dict[str, TocEntry] = {}
     seen_anchors: set[str] = set()
@@ -85,9 +84,11 @@ def parse_toc(soup: BeautifulSoup) -> dict[str, TocEntry]:
             result[anchor] = TocEntry(anchor, std, "a", label, "intro")
             continue
 
-        # Matrix anchors
-        if anchor in _MATRIX_ANCHOR_NAMES or anchor.lower().startswith("matrix"):
-            result[anchor] = TocEntry(anchor, "11", "*matrix", label, "matrix")
+        # Curriculum-matrix bookmark (MatrixHSR, Matrix2, …): kept ONLY as a
+        # boundary so the previous section stops there; its own content is
+        # never emitted (the matrix is not part of the self-study).
+        if is_curriculum_matrix_anchor(anchor):
+            result[anchor] = TocEntry(anchor, "", "", label, "excluded")
             continue
 
         # Skip other anchors (Appendices, Syllabi, Glossary, etc.) — those
@@ -214,6 +215,8 @@ def extract_toc_anchored_sections(html_bytes: bytes, base_id: str = "doc") -> li
             continue
 
         entry = toc[anchor]
+        if entry.kind == "excluded":
+            continue
         flags = _heuristic_flags(body)
         sections.append(
             Section(

@@ -75,21 +75,6 @@ def test_rowspan_expansion_basic():
 # --------------------------------------------------------- classification
 
 
-def test_classify_curriculum_matrix():
-    html = """
-    <table>
-      <tr><th></th><th>HS101</th><th>HS201</th><th>HS301</th><th>HS401</th><th>HS499</th></tr>
-      <tr><td>1.a</td><td>I,L</td><td>T,M</td><td>K,H</td><td>S,H</td><td>K,H</td></tr>
-      <tr><td>1.b</td><td>I,L</td><td>T,M</td><td>K,H</td><td>S,H</td><td>K,H</td></tr>
-      <tr><td>1.c</td><td>I,L</td><td>T,M</td><td>K,H</td><td>S,H</td><td>K,H</td></tr>
-      <tr><td>1.d</td><td>I,L</td><td>T,M</td><td>K,H</td><td>S,H</td><td>K,H</td></tr>
-      <tr><td>1.e</td><td>I,L</td><td>T,M</td><td>K,H</td><td>S,H</td><td>K,H</td></tr>
-      <tr><td>1.f</td><td>I,L</td><td>T,M</td><td>K,H</td><td>S,H</td><td>K,H</td></tr>
-    </table>"""
-    table = _parse(html).find("table")
-    assert _classify_table(table) == "curriculum_matrix"
-
-
 def test_classify_template_subspec_simple():
     html = """
     <table>
@@ -168,32 +153,6 @@ def test_deep_walk_handles_rowspan_marker_column():
     # The 'b.' section should have just its row + its rowspan continuation.
     sec_b = next(s for s in sections if s.heading.startswith("b"))
     assert "56 majors" in sec_b.markdown
-
-
-def test_deep_walk_curriculum_matrix_suppressed_by_default():
-    """By default deep_walk SKIPS curriculum_matrix tables — the matrix
-    extractor / wire_format.py owns them and the wizard surfaces them as
-    first-class entities. Passing ``skip_matrices=False`` restores the
-    legacy behavior for callers that don't run the matrix pipeline."""
-    matrix = (
-        "<html><body>"
-        "<table>"
-        "<tr><th></th><th>HS101</th><th>HS201</th><th>HS301</th><th>HS401</th><th>HS499</th></tr>"
-        "<tr><td>1.a</td><td>I,L</td><td>T,M</td><td>K,H</td><td>S,H</td><td>K,H</td></tr>"
-        "<tr><td>1.b</td><td>I,L</td><td>T,M</td><td>K,H</td><td>S,H</td><td>K,H</td></tr>"
-        "<tr><td>1.c</td><td>I,L</td><td>T,M</td><td>K,H</td><td>S,H</td><td>K,H</td></tr>"
-        "<tr><td>1.d</td><td>I,L</td><td>T,M</td><td>K,H</td><td>S,H</td><td>K,H</td></tr>"
-        "<tr><td>1.e</td><td>I,L</td><td>T,M</td><td>K,H</td><td>S,H</td><td>K,H</td></tr>"
-        "<tr><td>1.f</td><td>I,L</td><td>T,M</td><td>K,H</td><td>S,H</td><td>K,H</td></tr>"
-        "</table></body></html>"
-    )
-    # Default — matrix is suppressed (claimed by matrix_extract elsewhere).
-    assert deep_walk(matrix.encode("utf-8"), base_id="t") == []
-    # Opt-in legacy behavior — emits the matrix as a data-table section.
-    sections = deep_walk(matrix.encode("utf-8"), base_id="t", skip_matrices=False)
-    assert len(sections) == 1
-    assert sections[0].contains_table is True
-    assert sections[0].splitter_tier == "table_curriculum_matrix"
 
 
 def test_table_section_preserves_html_snippet():

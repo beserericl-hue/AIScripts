@@ -32,7 +32,7 @@ const STRINGS = {
   'tour.welcome.reviewQueue':
     "This is where you read other schools' stories. You read them and say how well they're doing.",
   'tour.welcome.compilations':
-    "This is where all the reader scores come together so you can pick the final score for each part.",
+    "This is where every reader's Compliant or Non-compliant marks come together so you can pick the final mark for each part.",
   'tour.welcome.settings':
     "This is where the boss sets up the people who use the portal.",
   'tour.welcome.help':
@@ -67,13 +67,11 @@ const STRINGS = {
   // are triaged before they go into the story). These steps only show up
   // when the Review screen is open; on the writing screen they stay hidden.
   'tour.review.summary':
-    "You're on the Drafts screen. This line at the top counts everything the helper pulled out of your paper: stories, proof, files, and tables.",
+    "You're on the Drafts screen. This line at the top counts everything the helper pulled out of your paper: stories, proof, and files.",
   'tour.review.rail':
     "This left-hand list is your menu. Each row is one part of your story. Click a row and its drafts show up in the middle.",
   'tour.review.docIntro':
     "This is the opening for your whole school — the part that comes before any numbered standard. Drafts dropped here introduce the school.",
-  'tour.review.matrices':
-    "These are your big charts (the curriculum tables). Click here to check the rows the helper found inside them.",
   'tour.review.supportingEvidence':
     "Three kinds of extra proof live here: faculty CVs, course Syllabi, and Papers or Projects. Click one to see what the helper found — and to tell it which Standard and Substandard each one belongs to.",
   'tour.review.cvs':
@@ -96,8 +94,6 @@ const STRINGS = {
     "Tell the helper what a draft really is — a Narrative, Evidence, or a File — or send it to a different Standard and Substandard if it landed in the wrong place.",
   'tour.review.apply':
     "When the drafts look right, this sends everything you approved into your story so you can write with it.",
-  'tour.review.next':
-    "Move on to the next step — the charts (Matrix) — before you finish.",
   'tour.review.redetect':
     "Ask the helper to read your paper again and look for more CVs, syllabi, and papers. Anything you already approved stays safe.",
   'tour.review.finish':
@@ -111,19 +107,15 @@ const STRINGS = {
     "The Introduction is the opening of your whole self-study — your mission and program description. Click here to write it.",
   'tour.ss.tabStandards':
     "Standards is where you answer each part, one at a time. You're looking at it now.",
-  'tour.ss.tabCurriculum':
-    "The Curriculum Matrix is the big table that maps your courses to the standards. Click here to fill it in.",
   'tour.ss.tabFiles':
     "Supporting File Library holds every file you uploaded — CVs, syllabi, papers. Click here to see them.",
   'tour.ss.readerReport':
     "Reader Report opens your compliance checklist on its own screen — mark each standard Compliant or Non-Compliant, add comments, and save. Come back here to read and comment on the self-study.",
-  'tour.ss.score':
-    "Score this part on the 0–3 scale as you review it. Your score is saved automatically.",
   'tour.ss.comments':
     "Comments on this part appear here on the right. Select text in the narrative and click Comment to add your own.",
   // tour.rr.* — the Reader Report editor screen
   'tour.rr.intro':
-    "This is the Reader Report. For every part of the self-study you read the school's answer, mark it Compliant or Non-Compliant, give it a 0–3 score, and add comments. Here's a quick tour of the screen.",
+    "This is the Reader Report. For every part of the self-study you read the school's answer, mark it Compliant or Non-Compliant, and add comments. Here's a quick tour of the screen.",
   'tour.rr.backLink':
     "This takes you back to the Self-Study to read the full story and add inline comments on the text.",
   'tour.rr.view':
@@ -135,25 +127,21 @@ const STRINGS = {
   'tour.rr.markComplete':
     "Mark complete when you're finished. That's when the lead reader can see your report.",
   'tour.rr.nav':
-    "These tabs jump to any part of the self-study — Introduction, Standards, Curriculum Matrix, and the Supporting File Library — without losing your place.",
+    "These tabs jump to any part of the self-study — Introduction, Standards, and the Supporting File Library — without losing your place.",
   'tour.rr.allReports':
     "Lead readers see every reader's report here, with the vote tally. Open each one once that reader marks it complete.",
   'tour.rr.aiAssessment':
     "Click this tag to see the AI helper's view of whether this part is compliant, and why.",
   'tour.rr.checklist':
     "This is the checklist for the part. Mark it Compliant or Non-Compliant and write your comments. It saves automatically.",
-  'tour.rr.score':
-    "Give this part a score from 0 to 3. The dash clears it. It saves automatically.",
   'tour.rr.files':
     "Files opens the documents and links for this part in the Supporting File Library — CVs, syllabi, and projects too.",
-  'tour.rr.matrix':
-    "Matrix shows this part in the Curriculum Matrix.",
   'tour.rr.comments':
     "Add a comment about this part: select text here and right-click. Everyone — reader 1, reader 2, and the lead reader — can see it.",
   'tour.rr.chatWindow':
     "This is the chat window. Every comment from every reader and the lead reader shows here, grouped by part. Reply, mark them resolved, or click one to jump to it. Use the Comments button up top to hide or show it.",
   'tour.rr.vote':
-    "Cast your vote on the program: Accept, Conditional, Deny, or Hold. The lead reader tallies every reader's vote.",
+    "Cast your vote on the program: Accept, Deny, or Hold. The lead reader tallies every reader's vote.",
   'tour.rr.recommendation':
     "Write your overall recommendation to the Council here — the decision and why.",
   'tour.rr.lastStep':
@@ -177,11 +165,9 @@ const STRINGS = {
 
   // tour.readerReview.* — the Reader review queue + review screen.
   'tour.readerReview.intro':
-    "This is where you read other schools' stories and say how well they did. Want a quick look?",
+    "This is where you read other schools' stories and mark each part Compliant or Non-compliant. Want a quick look?",
   'tour.readerReview.queue':
     "These are the schools waiting for you to read. Click one to open it.",
-  'tour.readerReview.screen':
-    "Here is one school's story. You read each part and give it a score.",
   'tour.readerReview.messages':
     "Need to ask a question? Click here to talk with the other people working on this school.",
   'tour.readerReview.lastStep':
@@ -189,13 +175,13 @@ const STRINGS = {
 
   // tour.leadCompilation.* — the Lead-Reader compilation screen.
   'tour.leadCompilation.intro':
-    "This is where all the readers' scores come together so you can pick the final one. Want a quick look?",
+    "This is where all the readers' Compliant or Non-compliant marks come together so you can pick the final mark for each part. Want a quick look?",
   'tour.leadCompilation.toolbar':
     "Use these buttons to choose what you see and how you share it.",
   'tour.leadCompilation.export':
-    "Click here to save all the scores as a file you can print or send.",
+    "Click here to save all the readers' marks and suggestions as a file you can print or send.",
   'tour.leadCompilation.sendBoard':
-    "When the scores are all set, click here to send this school to the board.",
+    "When the final marks are all set, click here to send this school to the board.",
   'tour.leadCompilation.lastStep':
     "That's it! Click the help button anytime to see this again.",
 
@@ -237,11 +223,9 @@ const STRINGS = {
   // hint.* — per-feature first-time nudges (CR-052 / Sprint 9.3). Fire once
   // ever via useOnceHint; five-year-old voice, describe what the thing IS.
   'hint.compilation.firstFinal':
-    "This is the final score for this part. You pick one number from all the readers' scores. The schools see this number.",
+    "This is the final mark for this part. Look at every reader's mark, then pick Compliant or Non-compliant. Non-compliant adds the part to the site-visit checklist.",
   'hint.checklist.firstVerify':
     "Click here when you have checked this part in person. It turns the row to \"Yes\" so everyone knows it is done.",
-  'hint.reader.firstScore':
-    "Pick one number for how well this part is done. 0 means not done, 3 means fully done. Your score is saved right away.",
   'hint.relay.firstQueue':
     "These are reader notes waiting for you. When you share one, the school can read it — but never who wrote it.",
   'hint.messages.firstThread':

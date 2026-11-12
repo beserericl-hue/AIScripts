@@ -32,7 +32,7 @@ async function seed(pcId: mongoose.Types.ObjectId) {
         '2.a': {
           standardCode: '2', specCode: 'a', standardTitle: '', specPrompt: '',
           narratives: [{ sectionId: 'n1', heading: 'h', snippet: 'original', htmlSnippet: '<p>original</p>', wordCount: 1, confidence: 0.9, acceptState: 'pending', rationale: '' }],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
         },
       },
       tags: [],
@@ -60,7 +60,7 @@ describe('POST /review/save-state', () => {
         standardCode: '2', specCode: 'a', standardTitle: '', specPrompt: '',
         narratives: [],
         evidenceText: [{ sectionId: 'n1', heading: 'h', snippet: 'EDITED CONTENT', htmlSnippet: '<p>EDITED CONTENT</p>', wordCount: 2, confidence: 0.9, acceptState: 'pending', rationale: '' }],
-        evidenceFiles: [], matrixCells: [],
+        evidenceFiles: [],
       },
     };
     const res = await request(app)

@@ -24,7 +24,7 @@ export interface ReaderConsensus {
 }
 
 /**
- * Site-Visit Review consensus — per numbered standard, which readers marked it
+ * Non-compliant summary consensus — per numbered standard, which readers marked it
  * non-compliant (agreed it's a problem) and which marked it compliant
  * (disagreed), using each reader's OWN ReaderReport marks (not the lead's
  * override layer). Standards any reader flagged come first, ranked by how many

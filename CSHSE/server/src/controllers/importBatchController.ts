@@ -19,6 +19,8 @@ import { ImportBatch } from '../models/ImportBatch';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { Submission } from '../models/Submission';
 import { recordVersion } from '../services/documentVersionService';
+import { isCurriculumMatrixFileName } from '../services/curriculumMatrixExclusion';
+import { storeExcludedCurriculumMatrixFile } from '../services/curriculumMatrixStore';
 import { startBatch } from '../services/batchAdvancer';
 import { applyAIImportCore } from './aiImportController';
 import { requireSubmissionAccess, requireCanImport } from '../services/submissionAccessGuard';
@@ -103,6 +105,22 @@ export async function addFileToBatch(
       res.status(409).json({ error: 'Batch is canceled; create a new batch' });
       return;
     }
+    // A curriculum matrix is not part of the self-study: keep it in the File
+    // Library (excluded, un-assigned) instead of adding it to the batch.
+    if (isCurriculumMatrixFileName(file.originalname)) {
+      const sub = await Submission.findById(batch.submissionId).select('institutionId');
+      if (!sub) {
+        res.status(404).json({ error: 'Submission not found' });
+        return;
+      }
+      res.status(201).json({
+        batchId: String(batch._id),
+        originalFilename: file.originalname,
+        ...(await storeExcludedCurriculumMatrixFile({ submission: sub, file, userId: req.user?.id })),
+      });
+      return;
+    }
+
     // CR-041 US-9 — adding files to a completed batch re-opens it so the
     // advancer picks up the new children. The merged Review re-gates if
     // holdForReview is on. Idempotent: if multiple files are added
@@ -430,11 +448,10 @@ export async function applyImportBatch(
             narratives: narrativesPayload,
             supportingEvidenceText: evidenceTextPayload,
             evidenceFiles: evidenceFilesPayload,
-            // Pass through tags/matrices/cvs/evidenceDocs/introductions from
+            // Pass through tags/cvs/evidenceDocs/introductions from
             // the persisted child record so the apply path sees the full
             // shape.
             tags: child.aiTags || [],
-            matrices: child.aiMatrices || [],
             cvs: child.aiCVs || [],
             evidenceDocs: child.aiEvidenceDocs || [],
             introductions: child.aiIntroductions || {},

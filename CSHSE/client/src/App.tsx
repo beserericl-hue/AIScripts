@@ -19,6 +19,7 @@ import SiteVisitChecklistPage from './pages/SiteVisitChecklistPage';
 import SiteVisitItineraryPage from './pages/SiteVisitItineraryPage';
 import RelayConsolePage from './pages/RelayConsolePage';
 import MessagesPage from './pages/MessagesPage';
+import { BoardLeadReaderReportView } from './features/board/BoardLeadReaderReportView';
 import Layout from './components/Layout';
 // CR-052 — Tour + Hint providers wrap the protected (logged-in) subtree.
 import { TourProvider } from './features/tour/TourProvider';
@@ -104,6 +105,8 @@ function App() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        {/* CSHSE Board — read-only completed Lead Reader Report. */}
+        <Route path="board/lead-reader-reports/:submissionId" element={<BoardLeadReaderReportView />} />
         <Route path="self-study/:submissionId?" element={<SelfStudyPage />} />
         {/* Sprint 3 — Reader review client. /reader is the queue; /reader/:id is the review screen. */}
         <Route path="reader" element={<ReaderDashboardPage />} />

@@ -39,6 +39,7 @@ import httpx
 from botocore.config import Config as BotoConfig
 
 from app.config import get_settings
+from app.splitter.curriculum_matrix_exclusion import drop_curriculum_matrix_detections
 
 
 def _is_transient_runtime_error(exc: BaseException) -> bool:
@@ -139,7 +140,6 @@ class JobRecord:
     buckets: dict[str, Any] | None = None
     tags: list[Any] | None = None
     placeholder_sections: list[Any] | None = None
-    matrices: list[Any] | None = None
     # CR-033 Phase 2b — per-faculty CV extractions (one entry per
     # detected CV). Same wire format as CVDetection.cv_to_dict().
     cvs: list[Any] | None = None
@@ -196,7 +196,6 @@ class JobRecord:
             "buckets": self.buckets,
             "tags": self.tags,
             "placeholderSections": self.placeholder_sections,
-            "matrices": self.matrices,
             # CR-033 Phase 2b — per-faculty CVs detected by cv_detector.
             "cvs": self.cvs or [],
             # CR-033 Phase 2c part 2 — standalone-CV mode flag.
@@ -580,11 +579,9 @@ def _run_pipeline(job: JobRecord) -> None:
                 buckets_count += len((b or {}).get("narratives") or [])
                 buckets_count += len((b or {}).get("evidenceText") or [])
                 buckets_count += len((b or {}).get("evidenceFiles") or [])
-                buckets_count += len((b or {}).get("matrixCells") or [])
             content_total = (
                 buckets_count
                 + len(job.tags or [])
-                + len(job.matrices or [])
                 + len(job.cvs or [])
                 + len(job.evidence_docs or [])
                 + len(job.introduction_hints or {})
@@ -797,7 +794,8 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
     """
     import uuid as _uuid
 
-    from app.splitter.mcc_narrative_walker import walk_mcc_pdf, slice_pdf_pages, extract_uri_links, denoise_matrix_cells, is_matrix_row
+    from app.splitter.mcc_narrative_walker import walk_mcc_pdf, slice_pdf_pages, extract_uri_links
+    from app.splitter.curriculum_matrix_exclusion import strip_curriculum_matrix_cells, is_curriculum_matrix_row
     from app.standards.loader import load_specifications
 
     settings = get_settings()
@@ -923,7 +921,7 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 "standardTitle": spec.standard_title,
                 "specPrompt": spec.spec_text,
                 "narratives": [], "evidenceText": [], "evidenceFiles": [],
-                "matrixCells": [], "coverageScore": None, "coverageCovered": None,
+                "coverageScore": None, "coverageCovered": None,
                 "coverageGaps": [], "coverageStrengths": [],
             }
         return buckets[key]
@@ -959,14 +957,13 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
             f'{": " + _esc(_std_title) if _std_title else ""}</h1>'
         )
         for (letter, heading, body) in _split_standard_by_letter(std.text):
-            # Matrix denoise (belt-and-suspenders alongside the walker clamp):
-            # a curriculum-matrix row that leaked into the narrative is dropped
-            # (the grid lives in Appendix A6, sliced to its own native file);
-            # otherwise strip any stray cell runs from the prose + heading.
-            if is_matrix_row(body) or is_matrix_row(heading):
+            # The curriculum matrix is NOT part of the self-study: a matrix row
+            # that leaked into the narrative is dropped, and any stray cell runs
+            # are stripped from the prose + heading (exclusion only).
+            if is_curriculum_matrix_row(body) or is_curriculum_matrix_row(heading):
                 continue
-            body = denoise_matrix_cells(body)
-            heading = denoise_matrix_cells(heading)
+            body = strip_curriculum_matrix_cells(body)
+            heading = strip_curriculum_matrix_cells(heading)
             if not body.strip():
                 continue
             refs = _parse_refs(body)
@@ -1054,30 +1051,19 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 else "Referenced in the program introduction." if entry.code in code_to_spec
                 else "Not referenced inline."
             )
-            # Classification flags the file card uses:
-            #  - intro_ref: cited only in the program introduction (no lettered
-            #    spec) → the card offers/pre-selects the "Introduction" option.
-            #  - is_matrix: a curriculum-matrix appendix → also surfaced for the
-            #    Curriculum Matrices section.
+            # intro_ref: cited only in the program introduction (no lettered
+            # spec) → the card offers/pre-selects the "Introduction" option.
             intro_ref = route_std is None and entry.code in code_to_spec
-            is_matrix = "curriculum matrix" in (entry.title or "").lower() or entry.kind == "matrix"
 
             # RULE: a document links BOTH to where it is CITED in the narrative
             # (ref_specs above) AND to every specification IT cites in its OWN
             # content — so the AI evaluator reads the file when it grades each of
-            # those specs. There can be many links. The curriculum matrix is the
-            # prime case: its grid rows ARE the curriculum content standards
-            # (11..N), so it backs all of them.
+            # those specs. There can be many links.
             _content_stds = {
                 str(n)
                 for n in (int(m.group(1)) for m in re.finditer(r"Standard\s*#?\s*(\d{1,2})\b", extracted))
                 if 1 <= n <= len(result.standards)
             }
-            if is_matrix:
-                # A CSHSE curriculum matrix maps courses to the Knowledge/Theory/
-                # Skills/Values standards (11 through the last) — link the whole
-                # contiguous range even if OCR dropped a row header.
-                _content_stds |= {str(n) for n in range(11, len(result.standards) + 1)}
             _seen_stds = {str(s) for s in ref_stds}
             for _n in sorted(_content_stds, key=int):
                 if _n not in _seen_stds:
@@ -1122,10 +1108,8 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                     "spec": route_spec,
                     "source": "mcc",
                     "introduction": intro_ref,
-                    "isCurriculumMatrix": is_matrix,
                 },
                 "introductionRef": intro_ref,
-                "isCurriculumMatrix": is_matrix,
                 "referencedByStandards": ref_stds,
                 # THIRD PASS — every specification that lists this appendix in a
                 # "(Supporting Document …)" note. Materialize links the file under
@@ -1350,7 +1334,6 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
             "narratives": [],
             "evidenceText": [],
             "evidenceFiles": [],
-            "matrixCells": [],
             "coverageScore": None,
             "coverageCovered": None,
             "coverageGaps": [],
@@ -1425,7 +1408,7 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
                     "standardCode": std_hint, "specCode": spec_hint,
                     "standardTitle": "", "specPrompt": (sec.heading or "")[:600],
                     "narratives": [], "evidenceText": [], "evidenceFiles": [],
-                    "matrixCells": [], "coverageScore": None, "coverageCovered": None,
+                    "coverageScore": None, "coverageCovered": None,
                     "coverageGaps": [], "coverageStrengths": [],
                 }
                 buckets[hkey] = hbucket
@@ -1643,11 +1626,6 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
                     _publish_status(job)
     _stage_done(job, "coverage_review", f"{len(filled)} reviewed, {len(spec_index) - len(filled)} synthesized")
 
-    # Template format: matrix extraction would need the source HTML, but the
-    # template_walker reads from the DOCX path and doesn't keep HTML around.
-    # Defer until the template walker is reworked to also surface raw HTML;
-    # template DOCXs typically ship the matrix as a separate appendix.
-    _stage_skipped(job, "matrix_extract", "template format — needs html capture rework")
     _stage_skipped(job, "gap_fill", "no appendix")
 
     job.buckets = buckets
@@ -1756,6 +1734,9 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     toc_detections_all = (
         _toc_anchor_in_body(html_bytes, toc_entries) if toc_entries else []
     )
+    # A TOC entry for the curriculum matrix is never filed (not part of the
+    # self-study).
+    toc_detections_all, _ = drop_curriculum_matrix_detections(toc_detections_all)
     pre_toc_cv_count = len(cvs_wire)
     cvs_wire = _merge_cv_dets(cvs_wire, toc_detections_all)
     toc_added_cvs = len(cvs_wire) - pre_toc_cv_count
@@ -1797,6 +1778,14 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
         ]
     post_docs, sections = detect_evidence_docs(sections)
     evidence_doc_detections = pre_docs + post_docs
+    # A curriculum-matrix document is never stored or indexed. Its sections were
+    # already pulled out of the matcher input above; record their ids so the
+    # coverage verifier counts them as deliberately excluded, not missing.
+    evidence_doc_detections, _matrix_dropped = drop_curriculum_matrix_detections(evidence_doc_detections)
+    excluded_section_ids: set[str] = set()
+    for _d in _matrix_dropped:
+        excluded_section_ids.add(_d.section_id)
+        excluded_section_ids.update(getattr(_d, "section_ids", None) or [])
     if evidence_doc_detections:
         # CR-040 Phase 2c — generate one .docx per detection and upload
         # to import-scoped S3 keys so the wizard's "View file" button
@@ -1910,7 +1899,7 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
             "specCode": sp,
             "standardTitle": spec.standard_title,
             "specPrompt": spec.spec_text,
-            "narratives": [], "evidenceText": [], "evidenceFiles": [], "matrixCells": [],
+            "narratives": [], "evidenceText": [], "evidenceFiles": [],
             "coverageScore": None, "coverageCovered": None,
             "coverageGaps": [], "coverageStrengths": [],
         }
@@ -2046,16 +2035,10 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
                     _publish_status(job)
     _stage_done(job, "coverage_review", f"{len(filled)} reviewed, {len(spec_index) - len(filled)} synthesized")
 
-    # Matrix extract: parse the two CSHSE matrix anchors (MatrixHSR + Matrix2)
-    # and emit per-matrix wire dicts so the wizard's "Matrices (N)" view can
-    # show the full table and per-spec deep-links rather than fragmenting
-    # matrix rows into individual data-table cards under random specs.
-    matrices = _extract_matrices_safe(job, html_bytes)
     _stage_skipped(job, "gap_fill", "deferred to sub-sprint 1.b")
 
     job.buckets = buckets
     job.tags = tags
-    job.matrices = matrices
 
     # CR-033 Phase 2c part 2 — detect standalone-CV uploads. When the
     # coordinator drops just a CV.docx (no Standards/Specs structure),
@@ -2102,6 +2085,7 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
             intro_section_ids=intro_ids,
             cv_section_ids=cv_ids,
             evidence_doc_section_ids=ed_ids,
+            excluded_section_ids=excluded_section_ids,
         )
         job.coverage_report = report.to_dict()
         if report.missing_fragments:
@@ -2119,48 +2103,6 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
         job.warnings.append(
             f"coverage_verifier soft-failed: {type(exc).__name__}: {exc}"
         )
-
-
-def _extract_matrices_safe(job: "JobRecord", html_bytes: bytes) -> list[dict[str, Any]]:
-    """Run the curriculum-matrix extractor against the source HTML; never raise.
-
-    Matrix extraction is a best-effort enrichment: if the program level has
-    no matching template, if the anchors aren't present, or if the extractor
-    fails for any reason, we log to the job stage and return ``[]`` rather
-    than aborting the pipeline.
-    """
-    from app.matrix.template_loader import (
-        align_template_to_handbook,
-        load_matrix_template,
-    )
-    from app.matrix.wire_format import build_wire_matrices
-    from app.standards.loader import load_specifications
-
-    _stage_started(job, "matrix_extract", "")
-    try:
-        template = load_matrix_template(job.program_level)
-        handbook = load_specifications(job.program_level)
-        aligned = align_template_to_handbook(template, handbook)
-        matrices, _consumed = build_wire_matrices(html_bytes, aligned)
-    except FileNotFoundError as exc:
-        _stage_skipped(job, "matrix_extract", f"no template for {job.program_level}: {exc}")
-        return []
-    except Exception as exc:  # noqa: BLE001
-        job.errors.append(f"matrix_extract failed: {type(exc).__name__}: {exc}")
-        _stage_skipped(job, "matrix_extract", f"failed: {type(exc).__name__}")
-        return []
-
-    if not matrices:
-        _stage_done(job, "matrix_extract", "no matrices detected")
-        return []
-
-    total_cells = sum(len(m.get("cells", [])) for m in matrices)
-    _stage_done(
-        job,
-        "matrix_extract",
-        f"{len(matrices)} matrix(es), {total_cells} cells",
-    )
-    return matrices
 
 
 def _persist_evidence_docs_to_s3(job: "JobRecord", detections: list) -> None:

@@ -103,9 +103,7 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       anchorStep('[data-testid="rr-all-reports"]', 'tour.rr.allReports', translate),
       anchorStep('[data-testid^="rr-ai-"]', 'tour.rr.aiAssessment', translate),
       anchorStep('[data-testid^="rr-check-"]', 'tour.rr.checklist', translate, 'left'),
-      anchorStep('[data-testid^="rr-score-"]', 'tour.rr.score', translate, 'left'),
       anchorStep('[data-testid^="rr-files-"]', 'tour.rr.files', translate, 'left'),
-      anchorStep('[data-testid^="rr-matrix-"]', 'tour.rr.matrix', translate, 'left'),
       // Comments are explained at a HIGH LEVEL on the toolbar's Comments toggle —
       // a given specification may have no comments yet when the reader first
       // opens the report, so we don't anchor to a per-spec comment that may be
@@ -137,7 +135,6 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       anchorStep('[data-tour="review-summary"]', 'tour.review.summary', translate),
       anchorStep('[data-tour="review-rail"]', 'tour.review.rail', translate, 'right'),
       anchorStep('[data-tour="review-doc-intro"]', 'tour.review.docIntro', translate, 'right'),
-      anchorStep('[data-tour="review-matrices"]', 'tour.review.matrices', translate, 'right'),
       anchorStep('[data-tour="review-cvs"]', 'tour.review.cvs', translate, 'right'),
       anchorStep('[data-tour="review-syllabi"]', 'tour.review.syllabi', translate, 'right'),
       anchorStep('[data-tour="review-papers"]', 'tour.review.papers', translate, 'right'),
@@ -154,7 +151,6 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       anchorStep('[data-tour="review-place-as"]', 'tour.review.placeAs', translate, 'top'),
       anchorStep('[data-tour="review-assign"]', 'tour.review.assign', translate, 'top'),
       anchorStep('[data-tour="review-apply"]', 'tour.review.apply', translate),
-      anchorStep('[data-tour="review-next"]', 'tour.review.next', translate),
       anchorStep('[data-tour="review-redetect"]', 'tour.review.redetect', translate),
       anchorStep('[data-testid="finish-review-cta"]', 'tour.review.finish', translate),
       anchorStep('[data-tour="review-back-to-editor"]', 'tour.review.backToEditor', translate),
@@ -165,7 +161,6 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       // toolbar → evidence → actions → submit, matching the eye's path.
       anchorStep('[data-tour="ss-tab-introduction"]', 'tour.ss.tabIntroduction', translate),
       anchorStep('[data-tour="ss-tab-standards"]', 'tour.ss.tabStandards', translate),
-      anchorStep('[data-tour="ss-tab-curriculum"]', 'tour.ss.tabCurriculum', translate),
       anchorStep('[data-tour="ss-tab-files"]', 'tour.ss.tabFiles', translate),
       // Reader/lead-reader only — opens the Reader Report (drops for the PC,
       // whose toolbar has no such button).
@@ -174,8 +169,7 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       anchorStep('[data-tour="ss-editor"]', 'tour.ss.editor', translate, 'top'),
       anchorStep('[data-tour="ss-toolbar"]', 'tour.ss.toolbar', translate, 'bottom'),
       anchorStep('[data-tour="ss-evidence-text"]', 'tour.ss.evidenceText', translate, 'top'),
-      // Reader-only — the 0-3 score control + the comments rail on the right.
-      anchorStep('[data-tour="ss-score"]', 'tour.ss.score', translate, 'bottom'),
+      // Reader-only — the comments rail on the right.
       anchorStep('[data-tour="ss-comments"]', 'tour.ss.comments', translate, 'left'),
       anchorStep('[data-tour="ss-clear"]', 'tour.ss.clear', translate, 'top'),
       anchorStep('[data-tour="ss-save"]', 'tour.ss.save', translate, 'top'),
@@ -193,7 +187,6 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
     getSteps: ({ translate = t }) => [
       centerStep('tour.readerReview.intro', translate),
       anchorStep('[data-testid="reader-dashboard"]', 'tour.readerReview.queue', translate),
-      anchorStep('[data-testid="reader-review-screen"]', 'tour.readerReview.screen', translate),
       anchorStep('[data-testid="reader-messages-link"]', 'tour.readerReview.messages', translate),
       centerStep('tour.readerReview.lastStep', translate),
     ],

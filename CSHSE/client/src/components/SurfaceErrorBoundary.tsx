@@ -13,7 +13,7 @@ interface State {
 }
 
 /**
- * Catches render-time exceptions in a surface (Review / Matrix / editor) and
+ * Catches render-time exceptions in a surface (Review / editor) and
  * shows a recoverable message INSTEAD of letting the whole React tree unmount
  * to a blank white page. Without a boundary, one thrown render crashed the
  * entire app to a blank screen (reported on the per-card file upload).

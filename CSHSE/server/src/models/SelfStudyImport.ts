@@ -5,7 +5,7 @@ export interface IExtractedSection {
   pageNumber: number;
   startPosition: number;
   endPosition: number;
-  sectionType: 'narrative' | 'table' | 'matrix' | 'syllabus' | 'cv' | 'form' | 'unknown' | 'general' | 'intro' | 'supporting_evidence';
+  sectionType: 'narrative' | 'table' | 'syllabus' | 'cv' | 'form' | 'unknown' | 'general' | 'intro' | 'supporting_evidence';
   content: string;
   confidence: number;
   suggestedStandard?: string;
@@ -16,7 +16,7 @@ export interface IMappedSection {
   extractedSectionId: string;
   standardCode: string;
   specCode: string;
-  fieldType: 'narrative' | 'evidence' | 'matrix' | 'table';
+  fieldType: 'narrative' | 'evidence' | 'table';
   mappedBy: 'auto' | 'manual';
   mappedByUserId?: mongoose.Types.ObjectId;
   mappedAt: Date;
@@ -65,7 +65,6 @@ export interface IDetectedSection {
   standardCode?: string;
   specCode?: string;
   appliedDirectly?: boolean;
-  isMatrix?: boolean;
   // Text position offsets for placeholder re-insertion on resume
   textStartOffset?: number;
   textLength?: number;
@@ -124,7 +123,6 @@ export interface IAIBucket {
   narratives: IAIBucketItem[];
   evidenceText: IAIBucketItem[];
   evidenceFiles: IAIBucketItem[];
-  matrixCells: any[];
   coverageScore: number | null;
   coverageCovered: boolean | null;
   coverageGaps: string[];
@@ -208,7 +206,6 @@ export interface ISelfStudyImport extends Document {
   aiBuckets?: Record<string, IAIBucket>;  // keyed "std.spec"; stored as Mixed for flexibility
   aiTags?: IAITag[];
   aiPlaceholderSections?: IAIPlaceholderSection[];
-  aiMatrices?: any[];
   // CR-039 — Introduction buckets keyed by 'document' or 'standard-{N}'.
   // Stored as Mixed because the bucket items are the same shape as
   // aiBuckets[].narratives, with one new wrapping field (scope).
@@ -246,7 +243,6 @@ export interface ISelfStudyImport extends Document {
     narratives: number;
     evidenceText: number;
     evidenceFiles: number;
-    matrixCells: number;
     tags: number;
     placeholders: number;
   };
@@ -306,7 +302,6 @@ const AIBucketSchema = new Schema<IAIBucket>({
   narratives: { type: [AIBucketItemSchema], default: [] },
   evidenceText: { type: [AIBucketItemSchema], default: [] },
   evidenceFiles: { type: [AIBucketItemSchema], default: [] },
-  matrixCells: [{ type: Schema.Types.Mixed }],
   coverageScore: { type: Number, default: null },
   coverageCovered: { type: Boolean, default: null },
   coverageGaps: { type: [String], default: [] },
@@ -362,7 +357,7 @@ const ExtractedSectionSchema = new Schema<IExtractedSection>({
   endPosition: { type: Number, required: true },
   sectionType: {
     type: String,
-    enum: ['narrative', 'table', 'matrix', 'syllabus', 'cv', 'form', 'unknown', 'general', 'intro', 'supporting_evidence'],
+    enum: ['narrative', 'table', 'syllabus', 'cv', 'form', 'unknown', 'general', 'intro', 'supporting_evidence'],
     default: 'unknown'
   },
   content: { type: String, required: true },
@@ -377,7 +372,7 @@ const MappedSectionSchema = new Schema<IMappedSection>({
   specCode: { type: String, required: true },
   fieldType: {
     type: String,
-    enum: ['narrative', 'evidence', 'matrix', 'table'],
+    enum: ['narrative', 'evidence', 'table'],
     required: true
   },
   mappedBy: {
@@ -428,7 +423,6 @@ const DetectedSectionSchema = new Schema<IDetectedSection>({
   standardCode: String,
   specCode: String,
   appliedDirectly: { type: Boolean, default: false },
-  isMatrix: { type: Boolean, default: false },
   // Text position offsets for placeholder re-insertion on resume
   textStartOffset: Number,
   textLength: Number,
@@ -544,10 +538,9 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   aiBuckets: { type: Schema.Types.Mixed, default: undefined },
   aiTags: { type: [AITagSchema], default: [] },
   aiPlaceholderSections: { type: [AIPlaceholderSchema], default: [] },
-  aiMatrices: [{ type: Schema.Types.Mixed }],
   // CR-039
   aiIntroductions: { type: Schema.Types.Mixed, default: undefined },
-  // CR-040 Phase 1 — Mixed[] matches the aiMatrices pattern (TS won't
+  // CR-040 Phase 1 — Mixed[] (inline-object form) (TS won't
   // accept `[Schema.Types.Mixed]` with a default; use the inline object
   // form `[{ type: Schema.Types.Mixed }]` instead).
   aiEvidenceDocs: [{ type: Schema.Types.Mixed }],
@@ -573,7 +566,6 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
     narratives: { type: Number, default: 0 },
     evidenceText: { type: Number, default: 0 },
     evidenceFiles: { type: Number, default: 0 },
-    matrixCells: { type: Number, default: 0 },
     tags: { type: Number, default: 0 },
     placeholders: { type: Number, default: 0 }
   },

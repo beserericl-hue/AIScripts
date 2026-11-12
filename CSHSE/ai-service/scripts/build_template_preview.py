@@ -365,23 +365,6 @@ def _allocate_to_buckets(
                         rationale=rec.rationale,
                     )
                 )
-        elif section_type == "curriculum_matrix":
-            # Template format usually doesn't embed the matrix as table data
-            # — it's a separate DOCX. Route to tags so the user knows.
-            tags.append(
-                TagListEntry(
-                    tag_id=f"tag-{uuid.uuid4().hex[:8]}",
-                    section_id=sec.id,
-                    summary=sec.heading[:120],
-                    full_text=snippet[:600],
-                    suggested_std=std,
-                    suggested_spec=spec_letter,
-                    confidence=conf,
-                    source_heading=sec.heading[:120],
-                    accept_state=rec.accept_state,
-                    rationale="Matcher classified as curriculum_matrix; matrix-cell extraction runs separately on the matrix DOCX.",
-                )
-            )
 
     return buckets, tags, unmatched
 

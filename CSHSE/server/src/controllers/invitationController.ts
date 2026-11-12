@@ -82,6 +82,9 @@ export const createInvitation = async (req: AuthenticatedRequest, res: Response)
     if (role === 'program_coordinator' && userRole !== 'admin') {
       return res.status(403).json({ error: 'Only admin can invite program coordinators' });
     }
+    if (role === 'board' && userRole !== 'admin' && !(req.user as any)?.isSuperuser) {
+      return res.status(403).json({ error: 'Only admin can invite board members' });
+    }
     if (['reader', 'lead_reader'].includes(role) && !['admin', 'lead_reader'].includes(userRole || '')) {
       return res.status(403).json({ error: 'Only admin or lead reader can invite readers' });
     }
@@ -429,7 +432,7 @@ export const createActiveUser = async (req: AuthenticatedRequest, res: Response)
       return res.status(400).json({ error: 'Please enter a valid email address' });
     }
 
-    const allowedRoles = ['program_coordinator', 'reader', 'lead_reader', 'admin'];
+    const allowedRoles = ['program_coordinator', 'reader', 'lead_reader', 'admin', 'board'];
     const finalRole = allowedRoles.includes(role) ? role : 'reader';
     // Mirror the invite rules: only a real admin can mint admins / coordinators.
     if ((finalRole === 'admin' || finalRole === 'program_coordinator') && requesterRole !== 'admin' && !isSuper) {
@@ -453,7 +456,9 @@ export const createActiveUser = async (req: AuthenticatedRequest, res: Response)
       firstName: fn,
       lastName: ln,
       role: finalRole,
-      institutionId: inst,
+      // A board member is global (CSHSE-wide) — never bound to an institution.
+      institutionId: finalRole === 'board' ? undefined : inst,
+      isBoardMember: finalRole === 'board',
       isActive: true,
       status: 'active',
       // No password is set here, so this account signs in via MemberClick only.

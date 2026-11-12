@@ -148,7 +148,7 @@ def _build_prompt(
         "   every enumerated sub-item when the narrative + evidence reasonably cover the intent",
         "   (e.g. 'faculty make all curriculum decisions' covers setting policy, content,",
         "   implementation AND evaluation).",
-        "3. Documents/matrices/forms: when the criterion asks that a document, matrix, or form",
+        "3. Documents/tables/forms: when the criterion asks that a document, table, or form",
         "   be PROVIDED, its EXISTENCE in the file library satisfies that — do not treat it as a",
         "   gap because a table's exact cell contents can't be read from the extracted text.",
         "",

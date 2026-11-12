@@ -48,7 +48,6 @@ function baseProps(overrides: any = {}) {
     bucket: null,
     unplacedTags: [],
     placeholders: [],
-    matrices: [],
     selectedSectionId: null,
     onSelect: () => {},
     onBulkAction: () => {},

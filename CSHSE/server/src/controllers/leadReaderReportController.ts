@@ -3,11 +3,11 @@ import { Submission } from '../models/Submission';
 import { Assignment } from '../models/Assignment';
 import { User } from '../models/User';
 import { Comment } from '../models/Comment';
-import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { SiteVisit } from '../models/SiteVisit';
 import { LeadReaderReport } from '../models/LeadReaderReport';
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
+import { withoutCurriculumMatrixDocuments } from '../services/curriculumMatrixExclusion';
 import { buildReaderConsensus } from '../services/readerConsensus';
 import {
   generateLeadReaderReportDocx,
@@ -81,18 +81,19 @@ function parseCoursesFromFileName(name: string): Array<{ prefix: string; label: 
   return out;
 }
 
-/** Derive the course list from imported evidence when the curriculum matrix has
- *  no named courses. Sources: `rev:syllabus-toc:<n>:<slug>` tags (rich labels)
- *  when present, otherwise the course code in ANY evidence FILE NAME (syllabi,
- *  the matrix PDF, mapping tools…). Splits Program vs General-Education by course
- *  prefix. This is what fills the Lead Reader Report's required-course list for
- *  studies whose matrix was uploaded as a document but never parsed into
- *  structured rows (e.g. AACC — HUS/BIO/COM/CTA/CTP/MAT courses from ~16 syllabi). */
+/** Derive the required-course list from the imported evidence. Sources:
+ *  `rev:syllabus-toc:<n>:<slug>` tags (rich labels) when present, otherwise the
+ *  course code in an evidence FILE NAME (syllabi, mapping tools…). Splits
+ *  Program vs General-Education by course prefix (e.g. AACC — HUS/BIO/COM/CTA/
+ *  CTP/MAT courses from ~16 syllabi). A curriculum-matrix document is not part
+ *  of the self-study, so it never contributes. The lead reader can replace the
+ *  list with requiredCoursesOverride. */
 async function deriveCoursesFromSyllabi(submissionId: any): Promise<{ general: string[]; program: string[] }> {
   const ev: any[] = await SupportingEvidence.find({
     submissionId,
     isDeleted: { $ne: true },
   }).select('tags file.originalName').lean();
+  const evidence = withoutCurriculumMatrixDocuments(ev);
   // Prefer rich TOC labels; index the file-name codes by "PREFIX ###" so a TOC
   // label supersedes a bare code for the same course.
   const parsedMap = new Map<string, { prefix: string; label: string }>();
@@ -105,7 +106,7 @@ async function deriveCoursesFromSyllabi(submissionId: any): Promise<{ general: s
     const k = codeKey(p.label);
     if (!parsedMap.has(k)) parsedMap.set(k, p);
   };
-  for (const e of ev) {
+  for (const e of evidence) {
     const tags = (e.tags || []).map(String);
     for (const t of tags) {
       const mt = /^rev:syllabus-toc:\d+:(.+)$/.exec(t);
@@ -151,34 +152,11 @@ export async function buildSystemSections(submission: any) {
     .map((a) => a.userName)
     .filter(Boolean);
 
-  // Required courses from the curriculum matrices: non-human-services → General
-  // Education; human-services → Program courses.
-  const matrices: any[] = await CurriculumMatrix.find({ submissionId })
-    .select('matrixType courses')
-    .lean();
-  const courseLabel = (c: any) =>
-    [c.coursePrefix, c.courseNumber].filter(Boolean).join(' ').trim() +
-    (c.courseName ? `${c.coursePrefix || c.courseNumber ? ' — ' : ''}${c.courseName}` : '');
-  const collect = (type: string) =>
-    matrices
-      .filter((m) => m.matrixType === type)
-      .flatMap((m) => (m.courses || []).slice().sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0)))
-      .map(courseLabel)
-      .filter(Boolean);
-  let generalEducationCourses = collect('non_human_services_courses');
-  let programCourses = [...collect('human_services_courses'), ...collect('custom')];
-  // Fallback: many submitted matrices have UNNAMED course columns (the grid was
-  // imported without course headers), so `courses` is empty and both lists come
-  // back blank. Derive the course list from the imported syllabi — their
-  // table-of-contents entries carry clean course identifiers (e.g.
-  // "chs-360-counseling-strategies-for-individuals") — so the lead reader
-  // doesn't have to re-key the curriculum. Program vs General-Education is split
-  // by course prefix (the program's own prefix vs everything else).
-  if (generalEducationCourses.length === 0 && programCourses.length === 0) {
-    const derived = await deriveCoursesFromSyllabi(submissionId);
-    generalEducationCourses = derived.general;
-    programCourses = derived.program;
-  }
+  // Required courses, derived from the syllabi (Program vs General Education by
+  // course prefix). The lead reader can override the list in the report.
+  const derived = await deriveCoursesFromSyllabi(submissionId);
+  const generalEducationCourses = derived.general;
+  const programCourses = derived.program;
 
   // Compiled non-compliance: specs whose validation failed, with reader comments.
   const status =
@@ -250,7 +228,7 @@ const EDITABLE_FIELDS = [
   'vpaRecipients', 'contactInfo', 'accreditationStatus', 'initialAccreditationDate',
   'lastReaccreditationDate', 'siteVisitDate', 'noSiteVisitRequired', 'programDescription',
   'strengthsFromSelfStudy', 'strengthsFromSiteVisit', 'nonComplianceText',
-  'requiredCoursesOverride', 'secondSiteVisitorName', 'recommendation', 'conditionalRequirements',
+  'requiredCoursesOverride', 'secondSiteVisitorName', 'recommendation',
   'holdExplanation', 'additionalRecommendations', 'nextSelfStudySuggestions', 'submittedByName',
   'submissionDate',
 ] as const;
@@ -267,6 +245,11 @@ export async function saveLeadReaderReport(req: AuthenticatedRequest, res: Respo
   const set: Record<string, any> = { updatedBy: req.user?.id };
   for (const f of EDITABLE_FIELDS) {
     if (req.body[f] !== undefined) set[f] = req.body[f];
+  }
+  // Conditional accreditation is no longer a Council recommendation (Lauri, Nov 2026).
+  if (set.recommendation === 'conditional') {
+    res.status(400).json({ error: 'Conditional accreditation is no longer a recommendation option.' });
+    return;
   }
   const saved = await LeadReaderReport.findOneAndUpdate(
     { submissionId: submission._id },
@@ -312,16 +295,16 @@ export async function downloadLeadReaderReport(req: AuthenticatedRequest, res: R
 }
 
 /**
- * GET /api/submissions/:submissionId/site-visit-review
- * Site-Visit Review consensus — per standard, which readers marked it
+ * GET /api/submissions/:submissionId/non-compliant-summary
+ * Non-compliant summary consensus — per standard, which readers marked it
  * non-compliant vs compliant (who agreed / who didn't). Lead reader / admin
  * only (readers must never see other readers' verdicts), gated the same way as
- * the Lead Reader Report. Powers the "Site-Visit Review" popup on the Reader
+ * the Lead Reader Report. Powers the "Non-compliant summary" popup on the Reader
  * Report; it is a review tool and is NOT printed on any report.
  */
 export async function getSiteVisitReview(req: AuthenticatedRequest, res: Response): Promise<void> {
   if (!isLeadOrAdmin(req)) {
-    res.status(403).json({ error: 'Only a lead reader or admin may open the Site-Visit Review.' });
+    res.status(403).json({ error: 'Only a lead reader or admin may open the Non-compliant summary.' });
     return;
   }
   const submission = await requireSubmissionAccess(req as any, res, req.params.submissionId);

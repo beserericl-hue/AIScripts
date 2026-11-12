@@ -22,10 +22,8 @@ import webhooksRouter from './routes/webhooks';
 import reviewsRouter from './routes/reviews';
 import leadReviewsRouter from './routes/leadReviews';
 import reportsRouter from './routes/reports';
-import matrixRouter from './routes/matrix';
 import evidenceRouter from './routes/evidence';
 import submissionsRouter from './routes/submissions';
-import programCoursesRouter from './routes/programCourses';
 import adminRouter from './routes/admin';
 import commentsRouter from './routes/comments';
 import readerLockRouter from './routes/readerLock';
@@ -45,8 +43,7 @@ import invitationsRouter from './routes/invitations';
 import specsRouter from './routes/specs';
 import filesRouter from './routes/files';
 import standardsRouter from './routes/standards';
-import scoresRouter from './routes/scores';
-// CR-009 / Sprint 5.1 — lead-reader compilation (0-3 side-by-side + Final).
+// CR-009 / Sprint 5.1 — lead-reader compilation (readers' Compliant / Non-compliant marks + Final).
 import compilationRouter from './routes/compilation';
 import leadReaderReportRouter from './routes/leadReaderReport';
 // CR-010 / Sprint 5.4 — Portal direct messaging.
@@ -59,6 +56,7 @@ import evidenceRecommendationsRouter from './routes/evidenceRecommendations';
 import itineraryRouter from './routes/itinerary';
 // CR-053 / Sprint 7.1 — Board decisions + cycle scheduler.
 import boardDecisionsRouter from './routes/boardDecisions';
+import boardReportsRouter from './routes/boardReports';
 // CR-016 / Sprint 7.2 — In-app bug reporter.
 import bugReportsRouter from './routes/bugReports';
 // CR-020 / Sprint 7.3 — Admin audit-trail.
@@ -175,7 +173,7 @@ app.use('/api/invitations', invitationsRouter);
 app.use('/api/standards', standardsRouter); // Public endpoint - standard definitions
 
 // CR-034 — E2E seed router. MUST mount BEFORE the bare-`/api` catch-alls
-// (matrix/evidence/comments/readerLock/scores) which all run authenticate
+// (evidence/comments/readerLock) which all run authenticate
 // middleware and would 401 any /api/test/* request that fell through.
 // buildTestRouter returns null unless E2E_SEED_ENABLED=1; this block is a
 // true no-op in any normal deploy.
@@ -191,10 +189,8 @@ app.use('/api/webhooks', webhooksRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/lead-reviews', leadReviewsRouter);
 app.use('/api/reports', reportsRouter);
-app.use('/api', matrixRouter);
 app.use('/api', evidenceRouter);
 app.use('/api/submissions', submissionsRouter);
-app.use('/api/program-courses', programCoursesRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', commentsRouter);
 app.use('/api', readerLockRouter);
@@ -206,13 +202,13 @@ app.use('/api/change-requests', changeRequestsRouter);
 app.use('/api/admin/error-logs', errorLogsRouter);
 app.use('/api/specs', specsRouter);
 app.use('/api/files', filesRouter);
-app.use('/api', scoresRouter);
 app.use('/api', compilationRouter);
 app.use('/api', leadReaderReportRouter);
 app.use('/api', directMessagesRouter);
 app.use('/api', checklistRouter);
 app.use('/api', evidenceRecommendationsRouter);
 app.use('/api', itineraryRouter);
+app.use('/api/board', boardReportsRouter);
 app.use('/api', boardDecisionsRouter);
 app.use('/api', bugReportsRouter);
 app.use('/api', auditTrailRouter);

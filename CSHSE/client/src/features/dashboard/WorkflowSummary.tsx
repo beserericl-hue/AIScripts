@@ -6,7 +6,6 @@ import {
   BookOpen,
   FolderOpen,
   PenLine,
-  Grid3x3,
   Paperclip,
   CheckCircle2,
   Clock,
@@ -47,7 +46,6 @@ export interface WorkflowSummaryData {
     specsValidated: number;
     specsTotal: number;
     narrativesWritten: number;
-    matrixRows: number;
     evidenceFiles: number;
   };
   submit: {
@@ -351,7 +349,7 @@ export function WorkflowSummary({
 
       {/* 3. SELF-STUDY ---------------------------------------------------- */}
       <SectionShell step={3} label="Self-Study" hint="Committed content">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
           <CountTile
             icon={<CheckCircle2 className="w-6 h-6" />}
             label="Specs validated"
@@ -361,11 +359,6 @@ export function WorkflowSummary({
             icon={<PenLine className="w-6 h-6" />}
             label="Narratives"
             count={selfStudy?.narrativesWritten ?? 0}
-          />
-          <CountTile
-            icon={<Grid3x3 className="w-6 h-6" />}
-            label="Matrix rows"
-            count={selfStudy?.matrixRows ?? 0}
           />
           <CountTile
             icon={<Paperclip className="w-6 h-6" />}

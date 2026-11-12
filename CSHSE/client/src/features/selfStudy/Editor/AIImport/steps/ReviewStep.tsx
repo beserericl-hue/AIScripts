@@ -14,7 +14,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Rocket, Loader2, X, Upload, Sparkles, ChevronUp, ChevronDown } from 'lucide-react';
 import { useAIImportStore, type Tag, type BucketItem, type SpecBucket } from '../../../../../store/aiImportStore';
 import { SpecRail, UNPLACED_KEY, UNWRITTEN_KEY, INTRO_DOC_KEY, introStandardKey } from '../review/SpecRail';
-// Any selectedSpecKey starting with '_' is a synthetic rail key (matrices,
+// Any selectedSpecKey starting with '_' is a synthetic rail key (unplaced,
 // cvs, evidence-docs, papers, syllabi, etc.) — none of them map to a real
 // bucket lookup, so activeBucket must return null for them.
 import { ItemCardList, type ItemKind } from '../review/ItemCardList';
@@ -175,7 +175,6 @@ function FullReviewStep(): JSX.Element {
   const importId = useAIImportStore((s) => s.importId);
   const submissionId = useAIImportStore((s) => s.submissionId);
   const queryClient = useQueryClient();
-  const matrices = useAIImportStore((s) => s.matrices);
   const setStep = useAIImportStore((s) => s.setStep);
   const selectSpec = useAIImportStore((s) => s.selectSpec);
   const selectSection = useAIImportStore((s) => s.selectSection);
@@ -208,38 +207,6 @@ function FullReviewStep(): JSX.Element {
     if (next >= 0 && next < navKeys.length) selectSpec(navKeys[next]);
   }, [navIndex, navKeys, selectSpec]);
 
-  const setMatrixRowAnchor = useAIImportStore((s) => s.setMatrixRowAnchor);
-  const selectMatrixRow = useAIImportStore((s) => s.selectMatrixRow);
-
-  // CR-024 / S2B.6 — when the coordinator picks a spec in the rail we
-  // pre-position every matrix to that spec's row so it's already scrolled
-  // into view if they later click "Matrices". This is intentionally a soft
-  // pre-positioning (setMatrixRowAnchor) — not a view-switch (selectMatrixRow)
-  // — because the spec rail click means "I want to look at this spec",
-  // not "I want to look at the matrix".
-  const findMatrixRowAnchorForSpec = useCallback(
-    (specKey: string): string | null => {
-      // specKey shape from SpecRail is "<std>.<spec>" (e.g. "13.a"). Matrix
-      // row anchors are "matrix-{slug}-row-{std}-{spec}". Iterate matrices
-      // until we find a matching cell; return the first hit (anchors are
-      // matrix-scoped so two matrices' rows for the same spec are
-      // independent — both will scroll because both consume the same
-      // selectedMatrixRowAnchor, the MatricesView matches by suffix).
-      const dot = specKey.indexOf('.');
-      if (dot === -1) return null;
-      const std = specKey.slice(0, dot);
-      const spec = specKey.slice(dot + 1);
-      for (const m of matrices) {
-        const hit = m.cells.find((c) => c.std === std && c.spec === spec);
-        if (hit?.rowAnchor) return hit.rowAnchor;
-      }
-      return null;
-    },
-    [matrices]
-  );
-
-  const setMatrixScrollSpec = useAIImportStore((s) => s.setMatrixScrollSpec);
-
   // CR-068 — flat cross-spec "all narratives / evidence / files" list filter.
   // Declared here (above handleSelectSpec) so selecting a spec can clear it.
   const [typeFilter, setTypeFilter] = useState<
@@ -253,31 +220,9 @@ function FullReviewStep(): JSX.Element {
       // files" list. (Previously the flat list overrode the rail selection, so
       // the rail felt dead and there was no obvious way back.)
       setTypeFilter(null);
-      // For spec keys (not _matrices, _unplaced, _unwritten), pre-position
-      // the matrices view if coverage exists. For the synthetic buckets we
-      // leave the anchor alone.
       selectSpec(key);
-      if (!key.startsWith('_')) {
-        const anchor = findMatrixRowAnchorForSpec(key);
-        if (anchor) setMatrixRowAnchor(anchor);
-        // CR-024 Sprint 2B — broadcast the spec key so MatricesView can
-        // scroll + flash the matching row in EVERY visible matrix
-        // simultaneously, not just the first one our anchor lookup found.
-        setMatrixScrollSpec(key);
-      }
     },
-    [selectSpec, setMatrixRowAnchor, setMatrixScrollSpec, findMatrixRowAnchorForSpec]
-  );
-
-  // Spec cards offer a "Matrix" button that switches the center pane to
-  // the Matrices view scrolled to the row. Different from the soft
-  // pre-positioning above — this is an explicit "show me the matrix" action.
-  const handleJumpToMatrix = useCallback(
-    (specKey: string) => {
-      const anchor = findMatrixRowAnchorForSpec(specKey);
-      if (anchor) selectMatrixRow(anchor);
-    },
-    [findMatrixRowAnchorForSpec, selectMatrixRow]
+    [selectSpec]
   );
 
   const [reassignOpen, setReassignOpen] = useState(false);
@@ -416,15 +361,14 @@ function FullReviewStep(): JSX.Element {
   // confirm dialog tells the coordinator exactly what's going to land in
   // the editor.
   const applyTotals = useMemo(() => {
-    const t = { narratives: 0, evidenceText: 0, evidenceFiles: 0, matrixCells: 0 };
+    const t = { narratives: 0, evidenceText: 0, evidenceFiles: 0 };
     for (const b of Object.values(buckets)) {
       t.narratives += b.narratives.length;
       t.evidenceText += b.evidenceText.length;
       t.evidenceFiles += b.evidenceFiles.length;
     }
-    for (const m of matrices) t.matrixCells += (m.cells || []).length;
     return t;
-  }, [buckets, matrices]);
+  }, [buckets]);
 
   const apply = useAIImportStore((s) => s.apply);
   const status = useAIImportStore((s) => s.status);
@@ -479,7 +423,6 @@ function FullReviewStep(): JSX.Element {
       narratives: [],
       evidenceText: [],
       evidenceFiles: [],
-      matrixCells: [],
       coverageScore: null,
       coverageCovered: null,
       coverageGaps: [],
@@ -1138,7 +1081,6 @@ function FullReviewStep(): JSX.Element {
             narratives: [localItem],
             evidenceText: [],
             evidenceFiles: [],
-            matrixCells: [],
             coverageScore: null,
             coverageCovered: null,
             coverageGaps: [],
@@ -1189,7 +1131,6 @@ function FullReviewStep(): JSX.Element {
               </button>
             </React.Fragment>
           ))}
-          {applyTotals.matrixCells > 0 && <> · {applyTotals.matrixCells} matrix</>}
           {approvedIds.size > 0 && <> · <span className="text-emerald-700">{approvedIds.size} reviewed</span></>}
         </div>
         <div className="flex items-center gap-2">
@@ -1284,7 +1225,6 @@ function FullReviewStep(): JSX.Element {
           buckets={buckets}
           tags={tags}
           placeholders={placeholderSections}
-          matrices={matrices}
           selectedKey={selectedSpecKey}
           onSelect={handleSelectSpec}
           introductions={introductions}
@@ -1328,7 +1268,6 @@ function FullReviewStep(): JSX.Element {
               bucket={activeBucket}
               unplacedTags={unplacedTags}
               placeholders={placeholderSections}
-              matrices={matrices}
               selectedSectionId={selectedSectionId}
               onSelect={selectSection}
               onBulkAction={handleBulkAction}
@@ -1338,7 +1277,6 @@ function FullReviewStep(): JSX.Element {
               onToggleApproval={toggleApproval}
               onApproveAll={approveAll}
               onClearApprovals={clearApprovals}
-              onJumpToMatrix={handleJumpToMatrix}
               onAppendUnplacedToSpec={handleAppendUnplacedToSpec}
               onEditStart={handleEditStart}
               introductions={introductions}

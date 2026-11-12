@@ -32,7 +32,7 @@ export interface ParsedTable {
   pageNumber: number;
   headers: string[];
   rows: string[][];
-  tableType?: 'curriculum_matrix' | 'grading_scale' | 'schedule' | 'course_list' | 'unknown';
+  tableType?: 'grading_scale' | 'schedule' | 'course_list' | 'unknown';
 }
 
 export interface ParsedImage {
@@ -68,8 +68,7 @@ export interface TOCEntry {
   level: number;  // 1 = main section, 2 = subsection, etc.
   standardCode?: string;
   specCode?: string;
-  sectionType: 'standard' | 'matrix' | 'supporting_evidence' | 'intro' | 'appendix' | 'general';
-  isMatrix: boolean;
+  sectionType: 'standard' | 'supporting_evidence' | 'intro' | 'appendix' | 'general';
   isSupportingEvidence: boolean;
 }
 
@@ -112,7 +111,6 @@ const STANDARD_PATTERNS = [
   { pattern: /Standard\s*(\d{1,2})([a-z])?/gi, type: 'explicit' },
   { pattern: /\b(\d{1,2})\.([a-z])\b/g, type: 'numeric' },
   { pattern: /Specification\s*([a-z])/gi, type: 'spec' },
-  { pattern: /curriculum\s*matrix/gi, type: 'matrix', standard: '11' },
   { pattern: /field\s*(experience|placement)/gi, type: 'field', standard: '21' },
   { pattern: /faculty\s*credentials?/gi, type: 'faculty', standard: '6' },
   { pattern: /program\s*evaluation/gi, type: 'evaluation', standard: '4' },
@@ -122,13 +120,6 @@ const STANDARD_PATTERNS = [
 
 // Table type detection patterns
 const TABLE_PATTERNS = {
-  curriculum_matrix: [
-    /course/i,
-    /standard/i,
-    /[ITKS]/,
-    /[LMH]/,
-    /CHS\s*\d+/i
-  ],
   grading_scale: [
     /grade/i,
     /percentage/i,
@@ -715,43 +706,6 @@ export class DocumentParserService {
   }
 
   /**
-   * Detect if a table is a curriculum matrix
-   */
-  isCurriculumMatrix(table: ParsedTable): boolean {
-    const hasCourseCodes = table.headers.some(h => /CHS|course/i.test(h));
-    const hasStandardRefs = table.rows.some(row =>
-      row.some(cell => /^[ITKS]+[,\s]*[LMH]?$/i.test(cell))
-    );
-    return hasCourseCodes || hasStandardRefs || table.tableType === 'curriculum_matrix';
-  }
-
-  /**
-   * Parse curriculum matrix values
-   */
-  parseCurriculumMatrixCell(cellValue: string): {
-    types: ('I' | 'T' | 'K' | 'S')[];
-    depth: 'L' | 'M' | 'H' | null;
-  } {
-    const types: ('I' | 'T' | 'K' | 'S')[] = [];
-    let depth: 'L' | 'M' | 'H' | null = null;
-
-    const upperValue = cellValue.toUpperCase().replace(/[^ITKS LMH,]/g, '');
-
-    // Extract coverage types
-    if (upperValue.includes('I')) types.push('I');
-    if (upperValue.includes('T')) types.push('T');
-    if (upperValue.includes('K')) types.push('K');
-    if (upperValue.includes('S')) types.push('S');
-
-    // Extract depth
-    if (upperValue.includes('H')) depth = 'H';
-    else if (upperValue.includes('M')) depth = 'M';
-    else if (upperValue.includes('L')) depth = 'L';
-
-    return { types, depth };
-  }
-
-  /**
    * Convert plain text to HTML with proper header detection
    * Detects headers based on patterns like "Standard X", "Section X", uppercase lines, etc.
    */
@@ -1177,7 +1131,6 @@ export class DocumentParserService {
 
       // Determine section type
       const sectionType = this.determineSectionType(title, standardCode);
-      const isMatrix = this.isTOCEntryMatrix(title);
       const isSupportingEvidence = this.isTOCSupportingEvidence(title);
 
       // Final safety check - ensure title is valid
@@ -1193,7 +1146,6 @@ export class DocumentParserService {
         standardCode,
         specCode,
         sectionType,
-        isMatrix,
         isSupportingEvidence
       };
     } catch (error) {
@@ -1237,10 +1189,6 @@ export class DocumentParserService {
       return 'standard';
     }
 
-    if (lowerTitle.includes('matrix')) {
-      return 'matrix';
-    }
-
     if (
       lowerTitle.includes('appendix') ||
       lowerTitle.includes('appendices') ||
@@ -1262,15 +1210,6 @@ export class DocumentParserService {
     }
 
     return 'general';
-  }
-
-  /**
-   * Check if TOC entry is for a curriculum matrix
-   */
-  private isTOCEntryMatrix(title: string): boolean {
-    const lowerTitle = title.toLowerCase();
-    return lowerTitle.includes('matrix') ||
-           (lowerTitle.includes('curriculum') && !lowerTitle.includes('standard'));
   }
 
   /**
@@ -1301,7 +1240,6 @@ export class DocumentParserService {
           title: 'Full Document',
           level: 1,
           sectionType: 'general',
-          isMatrix: false,
           isSupportingEvidence: false
         },
         content: text,
@@ -1447,8 +1385,7 @@ export class DocumentParserService {
     let lastFoundPosition = tocEndPosition; // Track last found position to search sequentially
 
     for (const entry of sortedEntries) {
-      const isMatrixEntry = this.isTOCEntryMatrix(entry.title);
-      console.log(`[DocumentParser] Searching for: "${entry.title.substring(0, 40)}..." (page ${entry.pageNumber || '?'})${isMatrixEntry ? ' [MATRIX]' : ''}`);
+      console.log(`[DocumentParser] Searching for: "${entry.title.substring(0, 40)}..." (page ${entry.pageNumber || '?'})`);
 
       // Search from last found position (sections should appear in order)
       let position = this.findSectionTitlePosition(text, entry.title, lastFoundPosition);
@@ -1472,7 +1409,7 @@ export class DocumentParserService {
             console.log(`[DocumentParser] ✓ Found via full search at position ${position}`);
           } else {
             // PAGE NUMBER FALLBACK: Estimate position based on page number
-            // This is crucial for matrix sections that may not have matching headers
+            // This is crucial for sections that may not have matching headers
             if (entry.pageNumber && entry.pageNumber > 0) {
               const estimatedPosition = tocEndPosition + ((entry.pageNumber - 1) * charsPerPage);
               // Clamp to document bounds
@@ -1495,12 +1432,6 @@ export class DocumentParserService {
     const foundByPage = sectionPositions.filter(s => !s.foundByTitle).length;
     console.log(`[DocumentParser] Found ${sectionPositions.length} section positions: ${foundByTitle} by title, ${foundByPage} by page estimate`);
 
-    // Log any matrix sections that were estimated
-    const matrixSections = sectionPositions.filter(s => this.isTOCEntryMatrix(s.entry.title));
-    if (matrixSections.length > 0) {
-      console.log(`[DocumentParser] Matrix sections found: ${matrixSections.map(s => `"${s.entry.title.substring(0, 30)}" (${s.foundByTitle ? 'title' : 'page estimate'})`).join(', ')}`);
-    }
-
     // Now extract content between consecutive sections
     for (let i = 0; i < sectionPositions.length; i++) {
       const current = sectionPositions[i];
@@ -1519,9 +1450,7 @@ export class DocumentParserService {
       const content = text.substring(startPos, endPos).trim();
 
       // Lower threshold for estimated sections (they might not start exactly at a header)
-      // Also, matrix sections often contain tables which might be short in text form
-      const isMatrixSection = this.isTOCEntryMatrix(current.entry.title);
-      const minContentLength = isMatrixSection ? 20 : 50;
+      const minContentLength = 50;
 
       if (content.length > minContentLength) {
         // Build standard hint for AI
@@ -1547,7 +1476,7 @@ export class DocumentParserService {
         });
 
         const methodNote = current.foundByTitle ? '' : ' [PAGE ESTIMATE]';
-        console.log(`[DocumentParser] Extracted: "${current.entry.title.substring(0, 30)}..." (${content.length} chars)${methodNote}${isMatrixSection ? ' [MATRIX]' : ''}`);
+        console.log(`[DocumentParser] Extracted: "${current.entry.title.substring(0, 30)}..." (${content.length} chars)${methodNote}`);
       } else {
         console.log(`[DocumentParser] ⚠ Skipped short section: "${current.entry.title.substring(0, 30)}..." (${content.length} chars, min: ${minContentLength})`);
       }
@@ -2073,7 +2002,6 @@ export class DocumentParserService {
 
         // Determine section type
         const sectionType = this.determineSectionType(headerText, standardCode);
-        const isMatrix = this.isTOCEntryMatrix(headerText);
         const isSupportingEvidence = this.isTOCSupportingEvidence(headerText);
 
         // Build hints for AI
@@ -2094,7 +2022,6 @@ export class DocumentParserService {
             standardCode,
             specCode,
             sectionType,
-            isMatrix,
             isSupportingEvidence
           },
           content: sectionHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(), // Plain text
@@ -2170,7 +2097,6 @@ export class DocumentParserService {
                 standardCode,
                 specCode,
                 sectionType,
-                isMatrix: this.isTOCEntryMatrix(currentSection.title),
                 isSupportingEvidence: this.isTOCSupportingEvidence(currentSection.title)
               },
               content: content,
@@ -2211,7 +2137,6 @@ export class DocumentParserService {
             standardCode,
             specCode,
             sectionType,
-            isMatrix: this.isTOCEntryMatrix(currentSection.title),
             isSupportingEvidence: this.isTOCSupportingEvidence(currentSection.title)
           },
           content: content,
@@ -2298,7 +2223,6 @@ export class DocumentParserService {
     const sectionSummary = sections.map(s => ({
       title: s.tocEntry.title.substring(0, 50),
       type: s.tocEntry.sectionType,
-      isMatrix: s.tocEntry.isMatrix,
       standardHint: s.standardHint,
       contentLength: s.content.length
     }));
@@ -2368,7 +2292,6 @@ export class DocumentParserService {
       // Determine section type from title
       const { standardCode, specCode } = this.extractStandardFromTOCTitle(currentMatch.text);
       const sectionType = this.determineSectionType(currentMatch.text, standardCode);
-      const isMatrix = this.isTOCEntryMatrix(currentMatch.text);
       const isSupportingEvidence = this.isTOCSupportingEvidence(currentMatch.text);
 
       // Build hints
@@ -2389,7 +2312,6 @@ export class DocumentParserService {
           standardCode,
           specCode,
           sectionType,
-          isMatrix,
           isSupportingEvidence
         },
         content: sectionText,
@@ -2425,10 +2347,6 @@ export class DocumentParserService {
           section.tocEntry.specCode = matchingToc.specCode;
           section.specHint = `Specification ${matchingToc.specCode}`;
         }
-        if (matchingToc.isMatrix) {
-          section.tocEntry.isMatrix = true;
-          section.tocEntry.sectionType = 'matrix';
-        }
         if (matchingToc.isSupportingEvidence) {
           section.tocEntry.isSupportingEvidence = true;
           section.tocEntry.sectionType = 'supporting_evidence';
@@ -2437,7 +2355,7 @@ export class DocumentParserService {
           section.tocEntry.sectionType = matchingToc.sectionType;
         }
 
-        console.log(`[DocumentParser] Enriched section "${section.tocEntry.title.substring(0, 30)}..." with TOC hints: std=${matchingToc.standardCode}, matrix=${matchingToc.isMatrix}`);
+        console.log(`[DocumentParser] Enriched section "${section.tocEntry.title.substring(0, 30)}..." with TOC hints: std=${matchingToc.standardCode}`);
       }
     }
   }
@@ -2500,9 +2418,7 @@ export class DocumentParserService {
     }
 
     // Add section type hint
-    if (section.tocEntry.isMatrix) {
-      formattedContent += '[SECTION TYPE: CURRICULUM MATRIX - This should be imported into the curriculum matrix grid]\n\n';
-    } else if (section.tocEntry.isSupportingEvidence) {
+    if (section.tocEntry.isSupportingEvidence) {
       formattedContent += '[SECTION TYPE: SUPPORTING EVIDENCE - This is supplementary documentation]\n\n';
     }
 
@@ -2515,11 +2431,8 @@ export class DocumentParserService {
   /**
    * Get sections filtered by type for specific processing
    */
-  filterSectionsByType(sections: TOCBasedSection[], type: 'standard' | 'matrix' | 'supporting_evidence'): TOCBasedSection[] {
+  filterSectionsByType(sections: TOCBasedSection[], type: 'standard' | 'supporting_evidence'): TOCBasedSection[] {
     return sections.filter(s => {
-      if (type === 'matrix') {
-        return s.tocEntry.isMatrix;
-      }
       if (type === 'supporting_evidence') {
         return s.tocEntry.isSupportingEvidence;
       }
@@ -2576,8 +2489,6 @@ export class DocumentParserService {
       letter: /^([A-Z])\.\s+([A-Z][a-z]+.*)/,
       // Standard headers: "Standard 1:", "Standard 12 –"
       standard: /^Standard\s+(\d{1,2})\s*[:\-–—]/i,
-      // Matrix headers: "Matrix for Human Services Courses", "Curriculum Matrix"
-      matrix: /^Matrix\s+for|^Curriculum\s+Matrix/i,
       // Appendix headers: "Appendix", "Appendices", "Appendix A"
       appendix: /^Appendix|^Appendices/i,
     };
@@ -2595,18 +2506,12 @@ export class DocumentParserService {
       isStructural: boolean;
       type: 'roman' | 'letter' | 'number' | 'standard' | 'appendix' | 'heading';
       level: 1 | 2 | 3;
-      isMatrix?: boolean;
     } => {
       const trimmedText = text.trim();
 
       // Check appendix first (highest priority)
       if (STRUCTURAL_PATTERNS.appendix.test(trimmedText)) {
         return { isStructural: true, type: 'appendix', level: 1 };
-      }
-
-      // Check Matrix sections (e.g., "Matrix for Human Services Courses")
-      if (STRUCTURAL_PATTERNS.matrix.test(trimmedText)) {
-        return { isStructural: true, type: 'heading', level: 2, isMatrix: true };
       }
 
       // Check Part Roman (e.g., "Part I: General Standards")
@@ -2851,8 +2756,6 @@ export class DocumentParserService {
     const headerPatterns = [
       // Appendix (check first - highest priority)
       { pattern: /^Appendix|^Appendices/i, type: 'appendix' as const, level: 1 as const },
-      // Matrix sections: "Matrix for Human Services Courses"
-      { pattern: /^Matrix\s+for|^Curriculum\s+Matrix/i, type: 'heading' as const, level: 2 as const },
       // Part with Roman numeral: "Part I: General Standards"
       { pattern: /^Part\s+([IVXLCDM]+)[:\s]+(.+)/i, type: 'roman' as const, level: 1 as const },
       // Roman numerals I-V only: "I. GENERAL...", "II. CURRICULUM..."

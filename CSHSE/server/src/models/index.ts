@@ -22,17 +22,6 @@ export {
   IUnmappedContent
 } from './SelfStudyImport';
 
-// Curriculum matrix models
-export {
-  CurriculumMatrix,
-  ICurriculumMatrix,
-  ICourseEntry,
-  ICourseAssessment,
-  IStandardMapping,
-  CoverageType,
-  CoverageDepth
-} from './CurriculumMatrix';
-
 // Supporting evidence models
 export {
   SupportingEvidence,

@@ -43,7 +43,7 @@ const bucketsWithOrigin = (importId: string) => ({
       wordCount: 1, confidence: 0.9, acceptState: 'pending', rationale: '',
       sourceImportId: importId,
     }],
-    evidenceText: [], evidenceFiles: [], matrixCells: [],
+    evidenceText: [], evidenceFiles: [],
   },
 });
 

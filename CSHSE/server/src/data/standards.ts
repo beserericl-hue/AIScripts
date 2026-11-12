@@ -329,8 +329,8 @@ export const CSHSE_STANDARDS: StandardDefinition[] = [
       },
       {
         code: 'c',
-        title: 'Curriculum Matrix',
-        text: 'Provide a curriculum matrix showing where program objectives and CSHSE standards are addressed in courses.'
+        title: 'Required Courses',
+        text: 'Identify the required courses for all students that contribute to compliance with the Curriculum Standards and their Specifications.'
       },
       {
         code: 'd',

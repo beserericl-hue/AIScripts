@@ -1,6 +1,6 @@
 {
   "_fixture_name": "wizard_review_pre_cr043_state",
-  "_purpose": "CR-043 AC#13/14 cutover-clear test. Seeds a submission with NO Submission.aiReviewState but with a prior SelfStudyImport that has pre-CR-043 aiBuckets / aiTags / aiCVs / aiEvidenceDocs / aiIntroductions / aiIntroductionHints / aiPlaceholderSections / aiMatrices populated. Specs verify the first post-CR-043 merge wipes those fields on prior imports (AC#13) and that the clear is idempotent on subsequent imports (AC#14).",
+  "_purpose": "CR-043 AC#13/14 cutover-clear test. Seeds a submission with NO Submission.aiReviewState but with a prior SelfStudyImport that has pre-CR-043 aiBuckets / aiTags / aiCVs / aiEvidenceDocs / aiIntroductions / aiIntroductionHints / aiPlaceholderSections populated. Specs verify the first post-CR-043 merge wipes those fields on prior imports (AC#13) and that the clear is idempotent on subsequent imports (AC#14).",
   "user": {
     "_comment_password": "CR-042 — password field intentionally absent. Seeded users are SSO-only.",
     "email": "coordinator-pre-cr043@example.test",
@@ -38,7 +38,6 @@
         ],
         "evidenceText": [],
         "evidenceFiles": [],
-        "matrixCells": [],
         "coverageScore": 0.8,
         "coverageCovered": true,
         "coverageGaps": [],
@@ -63,7 +62,6 @@
     "aiPlaceholderSections": [
       { "paragraphIndex": 0, "heading": "Pre-CR-043 placeholder", "standardHint": null, "specHint": null }
     ],
-    "aiMatrices": [],
     "aiCVs": [
       { "sectionId": "pre-cr043-cv-1", "facultyName": "Pre Faculty" }
     ],

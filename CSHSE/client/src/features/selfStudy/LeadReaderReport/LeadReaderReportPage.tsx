@@ -18,7 +18,6 @@ import { api } from '../../../services/api';
 type AccreditationStatus = 'initial' | 'reaccreditation' | 'interim';
 type Recommendation =
   | 'accredit_no_conditions'
-  | 'conditional'
   | 'deny'
   | 'hold'
   | '';
@@ -52,7 +51,6 @@ interface LeadReaderReportFields {
   requiredCoursesOverride: string;
   secondSiteVisitorName: string;
   recommendation: Recommendation;
-  conditionalRequirements: string;
   holdExplanation: string;
   additionalRecommendations: string;
   nextSelfStudySuggestions: string;
@@ -83,7 +81,6 @@ const emptyFields = (defaults?: {
   requiredCoursesOverride: '',
   secondSiteVisitorName: '',
   recommendation: '',
-  conditionalRequirements: '',
   holdExplanation: '',
   additionalRecommendations: '',
   nextSelfStudySuggestions: '',
@@ -110,7 +107,6 @@ const ACCREDITATION_OPTIONS: { value: AccreditationStatus; label: string }[] = [
 
 const RECOMMENDATION_OPTIONS: { value: Exclude<Recommendation, ''>; label: string }[] = [
   { value: 'accredit_no_conditions', label: 'Accreditation with no conditions' },
-  { value: 'conditional', label: 'Conditional accreditation. List the requirements below.' },
   { value: 'deny', label: 'Deny accreditation due to significant noncompliance' },
   { value: 'hold', label: 'Hold a decision. Please explain.' },
 ];
@@ -674,16 +670,6 @@ export function LeadReaderReportPage({ submissionId }: { submissionId: string })
                   />
                   {o.label}
                 </label>
-                {o.value === 'conditional' && fields.recommendation === 'conditional' && (
-                  <textarea
-                    data-testid="lrr-conditionalRequirements"
-                    value={fields.conditionalRequirements}
-                    onChange={(e) => setField('conditionalRequirements', e.target.value)}
-                    placeholder="List the requirements for conditional accreditation."
-                    rows={4}
-                    className={`${textareaCls} mt-2`}
-                  />
-                )}
                 {o.value === 'hold' && fields.recommendation === 'hold' && (
                   <textarea
                     data-testid="lrr-holdExplanation"

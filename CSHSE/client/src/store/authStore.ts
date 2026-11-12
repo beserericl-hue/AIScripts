@@ -16,10 +16,12 @@ interface User {
   email: string;
   firstName: string;
   lastName: string;
-  role: 'admin' | 'program_coordinator' | 'lead_reader' | 'reader';
+  role: 'admin' | 'program_coordinator' | 'lead_reader' | 'reader' | 'board';
   institutionId?: string;
   institutionName?: string;
   isSuperuser?: boolean;
+  // CSHSE Board member (read-only access to completed Lead Reader Reports).
+  isBoardMember?: boolean;
   // CR-060 — per-institution role assignments (PC@A, Reader@B, …).
   roleAssignments?: Array<{ role: string; institutionId: string; institutionName?: string }>;
   // CR-045 — server defaults hideLegacyImporter to true when absent.
@@ -39,15 +41,27 @@ export interface ActiveContext {
 
 type RoleAssignment = { role: string; institutionId: string; institutionName?: string };
 
+// CSHSE Board is GLOBAL — offered in the role switcher as the pseudo-assignment
+// "Board · CSHSE". The server accepts exactly this (X-Active-Role: board,
+// X-Active-Institution-Id: cshse) only for users who hold board membership.
+export const BOARD_ASSIGNMENT: RoleAssignment = { role: 'board', institutionId: 'cshse', institutionName: 'CSHSE' };
+
+/** The user's switchable roles: their institution assignments + Board · CSHSE. */
+export function assignmentsWithBoard(u: User | null | undefined): RoleAssignment[] {
+  const ra = [...(u?.roleAssignments || [])];
+  if (u && (u.isBoardMember || u.role === 'board')) ra.push(BOARD_ASSIGNMENT);
+  return ra;
+}
+
 function holds(u: User | null | undefined, ctx: ActiveContext | null | undefined): boolean {
   if (!u || !ctx) return false;
-  return (u.roleAssignments || []).some((a) => a.role === ctx.role && String(a.institutionId) === String(ctx.institutionId));
+  return assignmentsWithBoard(u).some((a) => a.role === ctx.role && String(a.institutionId) === String(ctx.institutionId));
 }
 
 interface ImpersonationState {
   isImpersonating: boolean;
   originalUser: User | null;
-  impersonatedRole?: 'admin' | 'program_coordinator' | 'lead_reader' | 'reader';
+  impersonatedRole?: 'admin' | 'program_coordinator' | 'lead_reader' | 'reader' | 'board';
   impersonatedUser?: User | null;
 }
 
@@ -100,9 +114,9 @@ export const useAuthStore = create<AuthState>()(
       // Role-only impersonation has no specific identity → no switcher.
       getRoleAssignments: () => {
         const { user, impersonation } = get();
-        if (impersonation.isImpersonating) return impersonation.impersonatedUser?.roleAssignments || [];
+        if (impersonation.isImpersonating) return assignmentsWithBoard(impersonation.impersonatedUser);
         if (user?.isSuperuser || user?.role === 'admin') return [];
-        return user?.roleAssignments || [];
+        return assignmentsWithBoard(user);
       },
 
       getActiveContext: () => {
@@ -216,7 +230,7 @@ export const useAuthStore = create<AuthState>()(
           impersonation: {
             isImpersonating: true,
             originalUser: user,
-            impersonatedRole: role as 'admin' | 'program_coordinator' | 'lead_reader' | 'reader',
+            impersonatedRole: role as 'admin' | 'program_coordinator' | 'lead_reader' | 'reader' | 'board',
             impersonatedUser: impersonatedUser || null,
           },
           needsImpersonationSelection: false,

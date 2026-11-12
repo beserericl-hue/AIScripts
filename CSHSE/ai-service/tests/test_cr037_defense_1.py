@@ -4,7 +4,7 @@ CR-037 Defense 1 — ai-service self-validates before terminal callback.
 Defenses 2 (server rewrite) + 3 (client gate) already ship and catch the
 empty-bucket case downstream. Defense 1 closes the loop at the source:
 if the pipeline finishes without producing any content (zero items
-across buckets / tags / matrices / cvs / evidenceDocs / introductionHints),
+across buckets / tags / cvs / evidenceDocs / introductionHints),
 the ai-service flips the job to `failed` with an actionable error rather
 than handing the cshse-server a technically-successful-but-empty
 terminal callback.
@@ -39,9 +39,7 @@ def test_defense_1_block_is_present_in_import_jobs_source():
         "narratives",
         "evidenceText",
         "evidenceFiles",
-        "matrixCells",
         "job.tags",
-        "job.matrices",
         "job.cvs",
         "job.evidence_docs",
         "job.introduction_hints",
@@ -78,11 +76,9 @@ def test_empty_job_record_would_count_as_zero():
         buckets_count += len((b or {}).get("narratives") or [])
         buckets_count += len((b or {}).get("evidenceText") or [])
         buckets_count += len((b or {}).get("evidenceFiles") or [])
-        buckets_count += len((b or {}).get("matrixCells") or [])
     total = (
         buckets_count
         + len(job_kwargs.get("tags") or [])
-        + len(job_kwargs.get("matrices") or [])
         + len(job_kwargs.get("cvs") or [])
         + len(job_kwargs.get("evidence_docs") or [])
         + len(job_kwargs.get("introduction_hints") or {})
@@ -91,7 +87,7 @@ def test_empty_job_record_would_count_as_zero():
 
 
 def test_cv_only_job_record_counts_as_NON_zero():
-    """Negative: a CV-only import (no buckets, no tags, no matrices, but
+    """Negative: a CV-only import (no buckets, no tags, but
     >=1 CV) MUST count as non-zero. Coordinators dropping a stand-alone
     CV.docx should hit the standalone-CV review flow, NOT the empty-
     bucket fail panel."""
@@ -99,7 +95,6 @@ def test_cv_only_job_record_counts_as_NON_zero():
     total = (
         0  # buckets empty
         + 0  # tags
-        + 0  # matrices
         + len(cvs)
         + 0  # evidence_docs
         + 0  # introduction_hints
@@ -115,7 +110,6 @@ def test_one_narrative_counts_as_non_zero():
             "narratives": [{"sectionId": "n1", "snippet": "body"}],
             "evidenceText": [],
             "evidenceFiles": [],
-            "matrixCells": [],
         }
     }
     count = 0
@@ -123,5 +117,4 @@ def test_one_narrative_counts_as_non_zero():
         count += len(b.get("narratives") or [])
         count += len(b.get("evidenceText") or [])
         count += len(b.get("evidenceFiles") or [])
-        count += len(b.get("matrixCells") or [])
     assert count == 1

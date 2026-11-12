@@ -1,6 +1,12 @@
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { extractEvidence, extractFileText } from './cshseAiClient';
 import { isS3Configured } from './s3Service';
+import {
+  isCurriculumMatrixDocument,
+  isCurriculumMatrixText,
+  curriculumMatrixExclusionUpdate,
+  notCurriculumMatrixFilter,
+} from './curriculumMatrixExclusion';
 
 /**
  * Index ONE evidence file's CONTENT into the per-institution Qdrant evidence
@@ -19,6 +25,8 @@ export async function indexEvidenceFile(institutionId: string, submissionId: str
     documentId: String(ev._id),
     sourceFilename: name,
   };
+  // A curriculum matrix is kept in the File Library but never indexed.
+  if (isCurriculumMatrixDocument(ev)) return 0;
   try {
     if (s3Key && mime === 'application/pdf' && isS3Configured()) {
       const out = await extractEvidence({ ...base, documentS3Key: s3Key, documentMimeType: 'application/pdf' });
@@ -33,6 +41,11 @@ export async function indexEvidenceFile(institutionId: string, submissionId: str
       } catch { /* best-effort */ }
     }
     if (!text.trim()) return 0;
+    if (isCurriculumMatrixText(text)) {
+      // Identified by its official form title only once the text was read.
+      await SupportingEvidence.updateOne({ _id: ev._id }, curriculumMatrixExclusionUpdate()).catch(() => undefined);
+      return 0;
+    }
     const out = await extractEvidence({ ...base, markdown: text });
     return out?.ready ? out.data.chunksUpserted || 0 : 0;
   } catch (e) {
@@ -45,6 +58,7 @@ export async function indexEvidenceFile(institutionId: string, submissionId: str
 export async function indexAllForSubmission(institutionId: string, submissionId: string): Promise<{ files: number; chunks: number }> {
   const files: any[] = await SupportingEvidence.find({
     submissionId, isDeleted: { $ne: true }, 'file.s3Key': { $exists: true, $ne: null },
+    ...notCurriculumMatrixFilter(),
   }).lean();
   let chunks = 0, done = 0;
   const CONC = 4;

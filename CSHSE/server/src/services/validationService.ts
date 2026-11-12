@@ -2,6 +2,12 @@ import mongoose from 'mongoose';
 import { ValidationResult, IValidationResult, IValidationResultData } from '../models/ValidationResult';
 import { Submission } from '../models/Submission';
 import { SupportingEvidence } from '../models/SupportingEvidence';
+import {
+  isCurriculumMatrixDocument,
+  isCurriculumMatrixText,
+  curriculumMatrixExclusionUpdate,
+  withoutCurriculumMatrixDocuments,
+} from './curriculumMatrixExclusion';
 import { getStandardByCode } from '../data/standards';
 import { getSpecCriteria } from '../data/levelStandards';
 import { INTRO_STANDARD_CODE, getIntroRubricRow } from '../data/introRubric';
@@ -165,11 +171,12 @@ export class ValidationService {
           { standardCode: { $exists: false } },
         ],
       })
-        .select('description metadata.description extractedText standardCode specCode file.originalName file.s3Key file.mimeType')
+        .select('description metadata.description extractedText standardCode specCode tags file.originalName file.s3Key file.mimeType')
         .lean();
       // Routed-to-this-spec items first; un-routed only fills leftover budget.
+      // A curriculum-matrix document is never evidence for an evaluation.
       const isRouted = (e: any) => e?.standardCode === standardCode && e?.specCode === specCode;
-      const ranked = ev.slice().sort((a, b) => (isRouted(a) ? 0 : 1) - (isRouted(b) ? 0 : 1));
+      const ranked = withoutCurriculumMatrixDocuments(ev).slice().sort((a, b) => (isRouted(a) ? 0 : 1) - (isRouted(b) ? 0 : 1));
       const MAX_ITEMS = 12;     // hard cap on number of evidence snippets
       const MAX_LEN = 1200;     // per-item char cap
       const TOTAL_BUDGET = 12_000; // hard cap on total evidence chars in the prompt
@@ -182,7 +189,7 @@ export class ValidationService {
       // so validation falsely reported "no supporting evidence" (AACC 18.g: 3
       // assigned PDFs, empty descriptions → skipped). Now their content is read.
       const s3BucketName = process.env.AWS_S3_BUCKET_NAME || '';
-      const evidenceBody = async (e: any): Promise<string> => {
+      const evidenceBody = async (e: any): Promise<string | null> => {
         const meta = (e?.metadata?.description || '').trim();
         if (meta) return meta;
         if (typeof e?.extractedText === 'string' && e.extractedText.trim()) return e.extractedText.trim();
@@ -191,6 +198,10 @@ export class ValidationService {
           try {
             const ex = await extractFileText({ s3Key, s3Bucket: s3BucketName, mimeType: e?.file?.mimeType, filename: e?.file?.originalName });
             const t = (ex?.text || '').trim().slice(0, 6000);
+            if (t && isCurriculumMatrixText(t)) {
+              await SupportingEvidence.updateOne({ _id: e._id }, { $set: { extractedText: t }, ...curriculumMatrixExclusionUpdate() }).catch(() => undefined);
+              return null; // identified as a curriculum matrix by its text — skip it
+            }
             if (t) {
               await SupportingEvidence.updateOne({ _id: e._id }, { $set: { extractedText: t } }).catch(() => undefined);
               return t;
@@ -210,6 +221,7 @@ export class ValidationService {
         // remains — this keeps the per-spec prompt small and on-topic.
         const title = (e?.description || e?.file?.originalName || '').trim();
         const body = await evidenceBody(e);
+        if (body === null || isCurriculumMatrixDocument(e)) continue;
         const text = body || title;
         if (!text) continue;
         const labeled = title && body && !body.startsWith(title) ? `${title}: ${body}` : text;
@@ -270,9 +282,9 @@ export class ValidationService {
       let libraryFileNames: string[] = [];
       try {
         const allFiles: any[] = await SupportingEvidence.find({ submissionId, isDeleted: { $ne: true } })
-          .select('file.originalName title')
+          .select('file.originalName title tags extractedText')
           .lean();
-        libraryFileNames = [...new Set(allFiles.map((f) => f.file?.originalName || f.title).filter(Boolean))].slice(0, 200);
+        libraryFileNames = [...new Set(withoutCurriculumMatrixDocuments(allFiles).map((f) => f.file?.originalName || f.title).filter(Boolean))].slice(0, 200);
       } catch { /* best-effort */ }
       const out = await evaluateSection({
         institutionId,

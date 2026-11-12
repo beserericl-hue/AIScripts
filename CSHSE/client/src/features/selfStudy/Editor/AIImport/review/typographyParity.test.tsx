@@ -80,7 +80,6 @@ describe('CR-044 — typography parity (prose prose-sm)', () => {
       ],
       evidenceText: [],
       evidenceFiles: [],
-      matrixCells: [],
       coverageScore: null,
       coverageCovered: null,
       coverageGaps: [],
@@ -92,7 +91,6 @@ describe('CR-044 — typography parity (prose prose-sm)', () => {
         bucket={bucket}
         unplacedTags={[]}
         placeholders={[]}
-        matrices={[]}
         selectedSectionId={null}
         onSelect={() => {}}
         onBulkAction={() => {}}

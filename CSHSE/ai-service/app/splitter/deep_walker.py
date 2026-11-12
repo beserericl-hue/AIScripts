@@ -6,13 +6,13 @@ row-by-row walks miss the inherited markers entirely.
 
 This walker:
   1. Identifies every top-level (non-nested) ``<table>`` in document order.
-  2. Classifies each as ``template_subspec`` | ``curriculum_matrix`` |
-     ``data_table`` | ``unknown``.
+  2. DROPS any curriculum-matrix table (the matrix is not part of the
+     self-study — see ``curriculum_matrix_exclusion``), then classifies the
+     rest as ``template_subspec`` | ``data_table`` | ``unknown``.
   3. For ``template_subspec`` tables, **expands rowspan/colspan** into a
      virtual grid so the marker cell is visible on every continuation row,
      then groups rows by the active marker → one Section per subspec.
-  4. For ``curriculum_matrix`` and other tables, emits a single Section
-     flagged appropriately.
+  4. For other tables, emits a single Section flagged appropriately.
   5. A fallback path captures substantial prose paragraphs that live
      OUTSIDE any table (rare in CSHSE templates but worth catching).
 
@@ -29,6 +29,10 @@ from typing import Iterator, Optional
 
 from bs4 import BeautifulSoup, Tag
 
+from app.splitter.curriculum_matrix_exclusion import (
+    is_curriculum_matrix_table,
+    is_curriculum_matrix_text_block,
+)
 from app.splitter.sections import Section, _heuristic_flags, extract_images_from_tag
 
 # Marker patterns at the head of a cell:
@@ -40,31 +44,6 @@ _NUMERIC_MARKER_RE = re.compile(
     r"^\s*(\d{1,2})\s*\.?\s*([a-h])?\s*\.?\s*(.*)$", re.IGNORECASE
 )
 _RESPONSE_PREFIX_RE = re.compile(r"^\s*(response|comment|narrative)\s*[:.]\s*", re.IGNORECASE)
-# CSHSE curriculum-matrix cell content. Three formats observed in real
-# self-studies:
-#   1. Concatenated letters: ITM, KSH, IL, ITKL, TKSH (most common)
-#   2. Comma-separated:      I,T,M
-#   3. Single letter:        I or T or K
-# Letters: I (Introduce), T (Teach/Theory), K (Knowledge), S (Skill),
-#          L/M/H (Low/Moderate/High depth)
-_MATRIX_CELL_RE = re.compile(
-    r"^\s*[ITKSLMH]{1,6}(?:\s*,\s*[ITKSLMH]{1,6})*\s*$", re.IGNORECASE
-)
-# Some CSHSE matrices use 'x' marks instead of letter combos.
-_MATRIX_X_CELL_RE = re.compile(r"^\s*[xX✓]\s*$")
-_COURSE_NUMBER_RE = re.compile(r"^\s*[A-Z]{2,5}\s*\d{2,4}(?:\s*/\s*\d{2,4})?\s*$")
-# Strong signal: the literal phrase "Specifications for Standard N" appears
-# in a cell. This indicates a curriculum-matrix table almost certainly.
-_SPECS_FOR_STD_RE = re.compile(r"Specifications?\s+for\s+Standard\s+\d{1,2}", re.IGNORECASE)
-# Handbook subspec prompts almost always start with one of these imperative
-# verbs. When the FIRST column of a table is filled with these prompts, the
-# table is a curriculum-matrix template for some Standard.
-_HANDBOOK_VERB_RE = re.compile(
-    r"^\s*(Provide|Describe|Demonstrate|Include|Articulate|Identify|"
-    r"Document|Indicate|Specify|List|Outline|Explain|Address|Discuss)\b",
-    re.IGNORECASE,
-)
-
 
 def _extract_marker(text: str) -> Optional[tuple[Optional[str], Optional[str]]]:
     """Return (standard?, spec?) extracted from cell text, or None.
@@ -176,47 +155,6 @@ def _classify_table(table: Tag) -> str:
     if not rows:
         return "unknown"
     cells = table.find_all(["td", "th"])
-
-    # ---- curriculum_matrix signals (any one strong signal is enough) -----
-    cell_texts = [c.get_text().strip() for c in cells]
-
-    letter_combo_cells = sum(1 for txt in cell_texts if _MATRIX_CELL_RE.match(txt))
-    x_mark_cells = sum(1 for txt in cell_texts if _MATRIX_X_CELL_RE.match(txt))
-    course_cells = sum(1 for txt in cell_texts if _COURSE_NUMBER_RE.match(txt))
-
-    # Strong textual signal: a cell explicitly says "Specifications for Standard N"
-    has_specs_for_std = any(_SPECS_FOR_STD_RE.search(txt) for txt in cell_texts)
-
-    # First-column rows with Handbook-imperative verbs (Provide/Describe/...)
-    # indicate the column 0 is a list of spec prompts — classic matrix shape.
-    first_col_verb_rows = 0
-    for r in rows[:60]:
-        tds = r.find_all(["td", "th"])
-        if not tds:
-            continue
-        first_txt = (tds[0].get_text() or "").strip()
-        if _HANDBOOK_VERB_RE.match(first_txt) and len(first_txt.split()) > 4:
-            first_col_verb_rows += 1
-
-    # A curriculum matrix is a GRID — it MUST have grid-content cells
-    # (letter combos, x-marks, or course numbers). A template-subspec table
-    # also has Handbook-verb rows in column 0, so verb count alone is not
-    # enough — require grid content alongside.
-    has_grid_content = (
-        (letter_combo_cells + x_mark_cells) >= 4 or course_cells >= 5
-    )
-    # Weaker signal: explicit "Specifications for Standard N" header + ANY
-    # grid hint (even one letter combo / one x-mark / one course cell).
-    soft_grid_content = (
-        letter_combo_cells > 0 or x_mark_cells > 0 or course_cells > 0
-    )
-
-    if has_grid_content and len(rows) >= 4:
-        return "curriculum_matrix"
-    if has_specs_for_std and soft_grid_content and len(rows) >= 4:
-        return "curriculum_matrix"
-    if first_col_verb_rows >= 3 and soft_grid_content and len(rows) >= 4:
-        return "curriculum_matrix"
 
     # ---- template_subspec (rowspan-aware) -----
     grid = _expand_table_with_spans(table)
@@ -363,7 +301,6 @@ def _table_as_one_section(
     if len(words) < 8:
         return None
     heading = heading_text or {
-        "curriculum_matrix": "(curriculum matrix table)",
         "data_table": "(data table)",
         "unknown": "(table)",
     }.get(table_type, "(table)")
@@ -412,54 +349,15 @@ def _iter_top_level_tables(soup: BeautifulSoup) -> Iterator[Tag]:
             yield table
 
 
-# Anchor names the matrix extractor claims. ANY top-level table whose
-# nearest preceding anchor (id or <a name>) is one of these is treated
-# as a matrix table by deep_walker and skipped unconditionally — even
-# if _classify_table would otherwise tag it as template_subspec. Without
-# this guard, rows from a curriculum matrix can leak into the section
-# list as Unplaced narratives (regression observed 2026-05-22).
-_KNOWN_MATRIX_ANCHOR_NAMES = ("MatrixHSR", "Matrix2")
-
-
-def _is_table_under_matrix_anchor(table: Tag) -> bool:
-    """Walk backwards through previous siblings and ancestors looking for
-    a recently-named matrix anchor before any other matrix anchor or a
-    new top-level <h1>/<h2> heading. If the nearest such anchor before
-    this table is one of the known matrix anchor names, treat the table
-    as matrix-owned and skip it.
-
-    Matches the same anchor-resolution logic the matrix extractor uses,
-    so deep_walker and build_wire_matrices stay in lock-step.
-    """
-    # Walk up + back through previous elements in document order. We use
-    # find_all_previous which yields preceding elements in reverse-document
-    # order — perfect for "find the nearest anchor that owns me".
-    for el in table.find_all_previous():
-        if el.name in ("h1",):
-            # Crossed a major-section header without finding a matrix
-            # anchor first — this table is not matrix-owned.
-            return False
-        if hasattr(el, "get"):
-            el_id = el.get("id")
-            el_name = el.get("name") if el.name == "a" else None
-            if el_id in _KNOWN_MATRIX_ANCHOR_NAMES or el_name in _KNOWN_MATRIX_ANCHOR_NAMES:
-                return True
-    return False
-
-
 def deep_walk(
     html_bytes: bytes,
     base_id: str = "doc",
-    skip_matrices: bool = True,
 ) -> list[Section]:
     """Extract sections by walking every top-level table.
 
-    When ``skip_matrices`` is True (the default), tables classified as
-    ``curriculum_matrix`` are NOT emitted as data-table sections — they
-    are handled by the matrix extractor (see ``matrix/wire_format.py``)
-    and surfaced in the wizard as first-class entities. Without this
-    skip, the same matrix would show up both as "(curriculum matrix
-    table)" cards under random specs AND as a structured matrix entry.
+    A curriculum-matrix table is DROPPED unconditionally (never a section):
+    the matrix is not part of the self-study, so it must never reach the
+    matcher, buckets, evidence, tags or coverage.
     """
     soup = BeautifulSoup(html_bytes, "html.parser")
     for tag in soup(["script", "style", "head"]):
@@ -473,17 +371,11 @@ def deep_walk(
     # a single table still get unique increasing indices.
     order_cursor = 0
     for table in _iter_top_level_tables(soup):
-        # Anchor-first skip: ANY table owned by a known matrix anchor
-        # belongs to the matrix extractor, NOT to deep_walker. This fires
-        # before _classify_table so misclassification (matrix table that
-        # _classify_table tags as template_subspec) can't leak rows into
-        # the section list as Unplaced narratives. (Bug observed
-        # 2026-05-22.)
-        if skip_matrices and _is_table_under_matrix_anchor(table):
+        # Exclusion runs BEFORE classification so a matrix that would
+        # classify as template_subspec can't leak rows in as narratives.
+        if is_curriculum_matrix_table(table):
             continue
         table_type = _classify_table(table)
-        if skip_matrices and table_type == "curriculum_matrix":
-            continue
         if table_type == "template_subspec":
             new_secs = _table_extracts_for_subspec_template(
                 table, base_id, order_start=order_cursor
@@ -514,12 +406,11 @@ def deep_walk_with_fallback(
     html_bytes: bytes,
     base_id: str = "doc",
     min_prose_words: int = 5,
-    skip_matrices: bool = True,
 ) -> list[Section]:
     """Walk tables AND emit sections for prose blocks outside tables.
 
-    ``skip_matrices`` is forwarded to ``deep_walk``; default True so the
-    wizard pipeline doesn't double-emit curriculum matrices.
+    Curriculum-matrix tables are dropped by ``deep_walk``; a curriculum-matrix
+    TITLE line outside the table is dropped here too (exclusion only).
 
     CR-039 Phase 2c part 2 — Problem 3: previously this dropped every
     paragraph below 50 words (mission statements, short intros, terms
@@ -535,7 +426,7 @@ def deep_walk_with_fallback(
     routed into the Introduction buckets by introduction_detector
     when the heading matches).
     """
-    table_sections = deep_walk(html_bytes, base_id, skip_matrices=skip_matrices)
+    table_sections = deep_walk(html_bytes, base_id)
 
     soup = BeautifulSoup(html_bytes, "html.parser")
     for tag in soup(["script", "style", "head"]):
@@ -569,6 +460,8 @@ def deep_walk_with_fallback(
         text = tag.get_text().strip()
         if not text:
             continue
+        if is_curriculum_matrix_text_block(text):
+            continue  # the matrix's title / coding key — not self-study content
         # Heading tags (`<h1>`–`<h6>`) bypass the word floor — a 2-word
         # "Mission" anchor still matters for introduction_detector.
         is_heading_tag = tag.name.startswith("h") and tag.name[1:].isdigit()

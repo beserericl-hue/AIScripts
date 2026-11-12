@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { Submission, ISubmission } from '../models/Submission';
 import { Institution } from '../models/Institution';
 // CR-060 — multi-role access: role-by-institution resolution.
-import { hasRoleAt, isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
+import { hasRoleAt, isGlobalAdmin, institutionIdsWithRole, isBoardSession } from '../services/roleResolver';
 import { requireSubmissionAccess, requireCanImport } from '../services/submissionAccessGuard';
 import { ValidationResult } from '../models/ValidationResult';
 import { Comment } from '../models/Comment';
@@ -12,7 +12,6 @@ import { emailService } from '../services/emailService';
 import { recordAuditEvent } from '../services/auditLog';
 import { User } from '../models/User';
 import { SelfStudyImport } from '../models/SelfStudyImport';
-import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { Assignment } from '../models/Assignment';
 import { JointVenture } from '../models/JointVenture';
@@ -24,6 +23,7 @@ import { partApprovalsOf, unapprovedParts } from '../services/specPartApprovals'
 import { ingestCorrection } from '../services/cshseAiClient';
 import { ensureInstitutionReaderAssignments } from '../services/readerAssignmentService';
 import mongoose from 'mongoose';
+import { notCurriculumMatrixFilter } from '../services/curriculumMatrixExclusion';
 
 /**
  * CR-074 — a self-study cannot be submitted while supporting files remain
@@ -39,7 +39,10 @@ async function findUnassignedEvidence(submissionId: string) {
     submissionId: new mongoose.Types.ObjectId(submissionId),
     isDeleted: false,
     $or: [{ standardCode: { $exists: false } }, { standardCode: null }, { standardCode: '' }],
-    tags: { $not: { $elemMatch: { $regex: /^reader-report/ } } }
+    tags: { $not: { $elemMatch: { $regex: /^reader-report/ } } },
+    // A curriculum matrix stays un-assigned by design (not part of the self-study),
+    // so it never blocks submission.
+    ...notCurriculumMatrixFilter(),
   })
     .select('_id file.originalName title')
     .lean();
@@ -457,7 +460,7 @@ export const saveIntroduction = async (req: AuthenticatedRequest, res: Response)
  * are computed from already-persisted data — no schema change:
  *   - import     ← SelfStudyImport records on this submission
  *   - drafts     ← Submission.aiReviewState (cvs / evidenceDocs / intros / buckets)
- *   - selfStudy  ← standardsStatus + narratives + CurriculumMatrix + SupportingEvidence
+ *   - selfStudy  ← standardsStatus + narratives + SupportingEvidence
  *   - submit     ← Institution.accreditationDeadline + validated/total
  *
  * Owner-PC / admin only; cross-institution PC access is 403 (mirrors
@@ -590,14 +593,7 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
         }
       });
     }
-    // matrix rows + evidence files (cheap counts on indexed submissionId).
-    const matrices: any[] = await CurriculumMatrix.find({ submissionId })
-      .select('rawContent')
-      .lean();
-    const matrixRows = matrices.reduce(
-      (sum, m) => sum + (Array.isArray(m.rawContent) ? m.rawContent.length : 0),
-      0
-    );
+    // evidence files (cheap count on indexed submissionId).
     const evidenceFiles = await SupportingEvidence.countDocuments({
       submissionId,
       isDeleted: { $ne: true }
@@ -624,7 +620,6 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
         specsRequired,
         specsTotal,
         narrativesWritten,
-        matrixRows,
         evidenceFiles
       },
       submit: {
@@ -1656,6 +1651,9 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
         or.push(clause);
       }
 
+      // CSHSE Board session — never lists self-studies (board reads completed
+      // Lead Reader Reports only, via /api/board/lead-reader-reports).
+      if (isBoardSession(req.user as any)) or.length = 0;
       if (or.length === 0) {
         filter._id = new mongoose.Types.ObjectId(); // no PC/reviewer role → see nothing
       } else if (or.length === 1) {

@@ -16,7 +16,7 @@ import type { SpecBucket, Tag } from '../../../../../store/aiImportStore';
 import { useAIImportStore } from '../../../../../store/aiImportStore';
 
 export type TagResolution = 'apply' | 'skip' | 'discard';
-export type TagKind = 'narrative' | 'evidenceText' | 'file' | 'matrix' | 'discard';
+export type TagKind = 'narrative' | 'evidenceText' | 'file' | 'discard';
 
 interface TagPopupProps {
   tag: Tag | null;

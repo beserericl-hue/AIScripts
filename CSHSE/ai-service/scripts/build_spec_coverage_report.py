@@ -6,8 +6,6 @@ For each (standard, spec) in the 99-spec Baccalaureate Handbook, lists:
   - The exact text that WILL BE IMPORTED as supporting evidence
     (Submission.narratives[std][spec].supportingEvidenceText OR a new
     SupportingEvidence row)
-  - The exact text that WILL BE IMPORTED as a curriculum matrix
-    (CurriculumMatrix.rawContent)
 
 Plus:
   - Specs with NO matched content (gaps the user should know about)
@@ -70,7 +68,6 @@ def main():
     # Group sections by (standard, spec)
     by_spec_narrative: dict[tuple[str, str], list[dict]] = defaultdict(list)
     by_spec_evidence: dict[tuple[str, str], list[dict]] = defaultdict(list)
-    by_spec_matrix: dict[tuple[str, str], list[dict]] = defaultdict(list)
     context_sections: list[dict] = []
     unknown_sections: list[dict] = []
 
@@ -86,8 +83,6 @@ def main():
             by_spec_narrative[key].append(r)
         elif t == "supporting_evidence":
             by_spec_evidence[key].append(r)
-        elif t == "curriculum_matrix":
-            by_spec_matrix[key].append(r)
         elif t == "context":
             context_sections.append(r)
         else:
@@ -103,7 +98,7 @@ def main():
         "description: For every CSHSE Baccalaureate Specification, the exact "
         "text that the AI import wizard would write into "
         "`Submission.narratives[std][spec]` (narrative vs supporting "
-        "evidence) plus matrix and unmatched-content gaps."
+        "evidence) plus unmatched-content gaps."
     )
     out("type: review")
     out("tags: [ai-import, sprint-1, stevenson, coverage, audit]")
@@ -144,7 +139,6 @@ def main():
     out(f"| Specs with at least one supporting-evidence match | {len(have_evidence)} | {100*len(have_evidence)/99:.0f}% |")
     out(f"| Specs with **any** matched content | {len(have_any)} | {100*len(have_any)/99:.0f}% |")
     out(f"| **Spec gaps** (zero matches → user must triage manually) | {len(gap)} | {100*len(gap)/99:.0f}% |")
-    out(f"| Curriculum matrices identified | {sum(len(v) for v in by_spec_matrix.values())} | — |")
     out(f"| Sections flagged `context` (won't import) | {len(context_sections)} | — |")
     out(f"| Sections flagged `unknown` (user must triage) | {len(unknown_sections)} | — |")
     out("")
@@ -202,10 +196,7 @@ def main():
             key = (sp.standard_code, sp.spec_code)
             nar = by_spec_narrative.get(key, [])
             ev = by_spec_evidence.get(key, [])
-            matrix = by_spec_matrix.get(key, [])
             status = "🟢 has narrative" if nar else ("🟠 evidence-only" if ev else "🔴 no match")
-            if matrix:
-                status = "📊 curriculum matrix" + (" + " + status if (nar or ev) else "")
 
             out(f"### `{sp.standard_code}.{sp.spec_code}` {status} — {sp.standard_title}")
             out("")
@@ -296,23 +287,6 @@ def main():
                     out("```")
                     out("")
 
-            if matrix:
-                out("")
-                out(
-                    f"**→ Imported as CURRICULUM MATRIX** "
-                    f"(`CurriculumMatrix.rawContent` for `submissionId`):"
-                )
-                out("")
-                for r in matrix:
-                    out(
-                        f"- conf {r['primary_confidence']:.2f} &nbsp; "
-                        f"words {r['wordCount']} &nbsp; "
-                        f"heading: _{(r['heading'] or '')[:80]}_"
-                    )
-                    out("  ```")
-                    out("  " + _truncate(r.get("snippet") or "", 400).replace("\n", "\n  "))
-                    out("  ```")
-                    out("")
 
             out("---")
             out("")

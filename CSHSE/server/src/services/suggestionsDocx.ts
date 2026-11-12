@@ -11,15 +11,15 @@ import mongoose from 'mongoose';
 import { Comment, IComment } from '../models/Comment';
 import { ValidationResult } from '../models/ValidationResult';
 import { Submission } from '../models/Submission';
-import { Score } from '../models/Score';
+import { ReaderReport } from '../models/ReaderReport';
+import { User } from '../models/User';
 import { brandedSectionChrome } from './docxBranding';
 
-// CR-003 / S11.1 — 0-3 rubric labels for the reader-suggestions DOCX.
-const SCORE_LABELS: Record<number, string> = {
-  0: 'Non-compliant (0)',
-  1: 'Partial (1)',
-  2: 'Largely compliant (2)',
-  3: 'Fully compliant (3)'
+// Lauri CR (Nov 2026) — the numeric score is retired; each reader's decision
+// is their Reader Report mark, printed as Compliant / Non-compliant.
+const MARK_LABELS: Record<'compliant' | 'noncompliant', string> = {
+  compliant: 'Compliant',
+  noncompliant: 'Non-compliant'
 };
 
 // ---------------------------------------------------------------------------
@@ -58,8 +58,8 @@ interface SpecBucket {
   comments: IComment[];
   overrideNotes: Array<{ note: string; verdict?: string }>;
   aiSuggestions: string[];
-  // CR-003 — captured 0-3 reader scores for this spec.
-  scores: Array<{ reviewerName: string; reviewerRole: string; score: number }>;
+  // Each reader's own Reader Report mark for this spec.
+  marks: Array<{ reviewerName: string; mark: 'compliant' | 'noncompliant' }>;
 }
 
 function bucketKey(std: string, spec: string): string {
@@ -125,7 +125,7 @@ async function loadBuckets(opts: SuggestionsDocOptions): Promise<SpecBucket[]> {
     const key = bucketKey(std, spec);
     let b = buckets.get(key);
     if (!b) {
-      b = { standardCode: std, specCode: spec, comments: [], overrideNotes: [], aiSuggestions: [], scores: [] };
+      b = { standardCode: std, specCode: spec, comments: [], overrideNotes: [], aiSuggestions: [], marks: [] };
       buckets.set(key, b);
     }
     return b;
@@ -159,18 +159,28 @@ async function loadBuckets(opts: SuggestionsDocOptions): Promise<SpecBucket[]> {
     }
   }
 
-  // CR-003 — 0-3 reader scores per spec. Included in both modes ("score yes,
-  // names no": pc_facing keeps the numeric score but the rendering below
-  // redacts the reviewer name).
-  const scores = await Score.find({ submissionId: submissionObjectId })
-    .sort({ standardCode: 1, specCode: 1 })
+  // Each reader's Compliant / Non-compliant mark per spec (from their own
+  // Reader Report). Included in both modes ("mark yes, names no": pc_facing
+  // keeps the mark but the rendering below redacts the reviewer name).
+  const reports = await ReaderReport.find({ submissionId: submissionObjectId })
+    .select('reviewerId rows')
     .lean();
-  for (const sc of scores) {
-    getBucket(sc.standardCode, sc.specCode).scores.push({
-      reviewerName: sc.reviewerName,
-      reviewerRole: sc.reviewerRole,
-      score: sc.score
-    });
+  const reviewerIds = reports.map((r) => String(r.reviewerId));
+  const users = reviewerIds.length
+    ? await User.find({ _id: { $in: reviewerIds } }).select('firstName lastName email').lean()
+    : [];
+  const nameById = new Map<string, string>(
+    users.map((u: any) => [String(u._id), `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email || 'Reader'])
+  );
+  for (const rep of reports) {
+    for (const row of rep.rows || []) {
+      if (!row.specCode) continue;
+      if (row.mark !== 'compliant' && row.mark !== 'noncompliant') continue;
+      getBucket(row.standardCode, row.specCode).marks.push({
+        reviewerName: nameById.get(String(rep.reviewerId)) || 'Reader',
+        mark: row.mark
+      });
+    }
   }
 
   // Only return buckets that have *something* to say.
@@ -180,7 +190,7 @@ async function loadBuckets(opts: SuggestionsDocOptions): Promise<SpecBucket[]> {
         b.comments.length > 0 ||
         b.overrideNotes.length > 0 ||
         b.aiSuggestions.length > 0 ||
-        b.scores.length > 0
+        b.marks.length > 0
     )
     .sort(compareBucketKeys);
 }
@@ -189,13 +199,13 @@ function buildSpecParagraphs(bucket: SpecBucket, mode: SuggestionsMode): Paragra
   const out: Paragraph[] = [];
   out.push(heading(`Standard ${bucket.standardCode}.${bucket.specCode}`, HeadingLevel.HEADING_3));
 
-  // CR-003 — compliance scores (0-3) lead the spec block. In pc_facing mode
-  // reviewer names are redacted to anonymous "Reader N" labels (score yes,
-  // names no).
-  if (bucket.scores.length) {
-    out.push(bold('Compliance score (0-3)'));
-    bucket.scores.forEach((s, i) => {
-      const label = SCORE_LABELS[s.score] ?? String(s.score);
+  // Readers' Compliant / Non-compliant marks lead the spec block. In
+  // pc_facing mode reviewer names are redacted to anonymous "Reader N" labels
+  // (mark yes, names no).
+  if (bucket.marks.length) {
+    out.push(bold('Reader compliance'));
+    bucket.marks.forEach((s, i) => {
+      const label = MARK_LABELS[s.mark];
       const who = mode === 'pc_facing' ? `Reader ${i + 1}` : s.reviewerName;
       out.push(
         new Paragraph({

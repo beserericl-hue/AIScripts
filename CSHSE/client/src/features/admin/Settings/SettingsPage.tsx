@@ -88,7 +88,7 @@ const allNavItems: NavItem[] = [
     id: 'dashboard-files',
     label: 'Dashboard Files',
     icon: <FolderOpen className="w-5 h-5" />,
-    description: 'Upload spec files and matrices for PC dashboard',
+    description: 'Upload specification files for the PC dashboard',
     access: 'admin'
   },
   {

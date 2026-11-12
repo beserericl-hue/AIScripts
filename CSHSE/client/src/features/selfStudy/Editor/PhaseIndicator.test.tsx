@@ -31,7 +31,7 @@ describe('<PhaseIndicator />', () => {
   });
 
   it('marks the Self-Study chip active when activeView is a self-study view', () => {
-    render(<PhaseIndicator {...baseProps} activeView="curriculum" />);
+    render(<PhaseIndicator {...baseProps} activeView="files" />);
     const chip = screen.getByRole('button', { name: /3\. Self-Study/ });
     expect(chip).toHaveAttribute('data-active', 'true');
     expect(chip).toHaveAttribute('aria-current', 'step');
@@ -42,10 +42,8 @@ describe('<PhaseIndicator />', () => {
     expect(screen.getByRole('button', { name: /1\. Import/ })).toHaveAttribute('data-active', 'true');
   });
 
-  it('marks the Drafts chip active for review-surface and matrix-surface', () => {
-    const { rerender } = render(<PhaseIndicator {...baseProps} activeView="review-surface" />);
-    expect(screen.getByRole('button', { name: /2\. Drafts/ })).toHaveAttribute('data-active', 'true');
-    rerender(<PhaseIndicator {...baseProps} activeView="matrix-surface" />);
+  it('marks the Drafts chip active for review-surface', () => {
+    render(<PhaseIndicator {...baseProps} activeView="review-surface" />);
     expect(screen.getByRole('button', { name: /2\. Drafts/ })).toHaveAttribute('data-active', 'true');
   });
 

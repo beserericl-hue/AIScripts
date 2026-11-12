@@ -6,7 +6,7 @@ import { useOnceHint } from '../../tour/useOnceHint';
 import { t } from '../../../i18n/strings';
 
 // ---------------------------------------------------------------------------
-// CR-012 / Sprint 6.1 — partial-compliance checklist surface.
+// CR-012 / Sprint 6.1 — site-visit checklist surface.
 //
 // View / container split:
 //   - ChecklistView  : pure presentational; takes items + handlers.
@@ -14,10 +14,12 @@ import { t } from '../../../i18n/strings';
 //                      verify/unverify + DOCX export.
 //
 // The visit team uses this during the in-person visit. Auto-populated
-// items appear when the lead reader has set a Final score of 0/1 on the
-// CompilationTab. Verification flips a row "Yes" with an optional note.
+// items appear when the lead reader sets a Final mark of Non-compliant on
+// the CompilationTab (Lauri CR Nov 2026 retired the 0-3 score). Verification
+// flips a row "Yes" with an optional note.
 // ---------------------------------------------------------------------------
 
+// 'partial' only appears on legacy rows from the retired 0-3 scale.
 export type ChecklistInclusionReason = 'partial' | 'non_compliant' | 'follow_up' | 'manual';
 
 export interface ChecklistItem {
@@ -25,7 +27,8 @@ export interface ChecklistItem {
   standardCode: string;
   specCode: string;
   inclusionReason: ChecklistInclusionReason;
-  finalScoreAtInclusion: number;
+  /** The lead reader's Final mark when the row was added (absent on manual / legacy rows). */
+  finalMarkAtInclusion?: 'compliant' | 'noncompliant';
   verified: boolean;
   verifiedByName?: string;
   verifiedAt?: string;
@@ -72,7 +75,7 @@ function reasonChipClasses(reason: ChecklistInclusionReason): string {
 }
 
 function reasonLabel(reason: ChecklistInclusionReason): string {
-  if (reason === 'partial') return 'Partial';
+  if (reason === 'partial') return 'Partial (legacy)';
   if (reason === 'non_compliant') return 'Non-compliant';
   if (reason === 'follow_up') return 'Follow-up';
   return 'Manual';
@@ -136,9 +139,13 @@ export function ChecklistView({
           </span>
         </span>
         <span className="text-slate-400">·</span>
-        <span>{data.counts.partial} partial</span>
-        <span className="text-slate-400">·</span>
-        <span>{data.counts.non_compliant} non-compliant</span>
+        <span data-testid="checklist-count-noncompliant">{data.counts.non_compliant} non-compliant</span>
+        {data.counts.partial > 0 && (
+          <>
+            <span className="text-slate-400">·</span>
+            <span data-testid="checklist-count-partial">{data.counts.partial} partial (legacy)</span>
+          </>
+        )}
         {(data.counts.manual || data.counts.follow_up) && (
           <>
             <span className="text-slate-400">·</span>
@@ -159,7 +166,7 @@ export function ChecklistView({
 
       {data.items.length === 0 ? (
         <div data-testid="checklist-empty" className="rounded border border-slate-200 bg-white p-6 text-center text-sm text-slate-600">
-          No partial-compliance items yet. Items appear here once the lead reader sets a Final score of 0 or 1 on the Compilation tab.
+          No checklist items yet. A specification appears here once the lead reader sets its Final mark to Non-compliant on the Compilation tab.
         </div>
       ) : (
         <ul className="space-y-2">

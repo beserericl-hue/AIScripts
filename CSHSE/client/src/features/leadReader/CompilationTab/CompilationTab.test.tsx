@@ -1,7 +1,8 @@
 /**
  * CR-009 / Sprint 5.1 — CompilationTabView unit tests (pure view).
  *
- * Pins the highlight rules and the inline Final-score editor.
+ * Pins the highlight rules, each reader's Compliant / Non-compliant mark,
+ * and the one-click Final-mark picker (Lauri CR Nov 2026: no 0-3 score).
  */
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
@@ -15,10 +16,7 @@ function wrap(children: React.ReactNode) {
 }
 
 const baseHandlers = {
-  onBeginEdit: vi.fn(),
-  onCancelEdit: vi.fn(),
-  onChangePendingFinal: vi.fn(),
-  onSaveFinal: vi.fn(),
+  onSetFinal: vi.fn(),
   onClearFinal: vi.fn(),
   // CR-011 export toolbar
   exportMode: 'internal' as const,
@@ -41,39 +39,39 @@ const sample: CompilationPayload = {
     {
       standardCode: '1',
       specCode: 'a',
-      scores: [
-        { reviewerId: 'r1', reviewerName: 'Reader Alpha', score: 3 },
-        { reviewerId: 'r2', reviewerName: 'Reader Bravo', score: 2 },
-        { reviewerId: 'r3', reviewerName: 'Reader Charlie', score: 0 },
+      marks: [
+        { reviewerId: 'r1', reviewerName: 'Reader Alpha', mark: 'compliant' },
+        { reviewerId: 'r2', reviewerName: 'Reader Bravo', mark: 'compliant' },
+        { reviewerId: 'r3', reviewerName: 'Reader Charlie', mark: 'noncompliant' },
       ],
-      hasZero: true,
+      hasNonCompliant: true,
       hasDisagreement: true,
       allAgree: false,
-      finalScore: null,
+      finalMark: null,
       excluded: false,
     },
     {
       standardCode: '1',
       specCode: 'b',
-      scores: [
-        { reviewerId: 'r1', reviewerName: 'Reader Alpha', score: 2 },
-        { reviewerId: 'r2', reviewerName: 'Reader Bravo', score: 2 },
+      marks: [
+        { reviewerId: 'r1', reviewerName: 'Reader Alpha', mark: 'compliant' },
+        { reviewerId: 'r2', reviewerName: 'Reader Bravo', mark: 'compliant' },
       ],
-      hasZero: false,
+      hasNonCompliant: false,
       hasDisagreement: false,
       allAgree: true,
-      finalScore: 2,
+      finalMark: 'compliant',
       finalSetByName: 'Lead Linda',
       excluded: false,
     },
     {
       standardCode: '2',
       specCode: 'a',
-      scores: [],
-      hasZero: false,
+      marks: [],
+      hasNonCompliant: false,
       hasDisagreement: false,
       allAgree: false,
-      finalScore: null,
+      finalMark: null,
       excluded: true,
       excludedReason: 'Not applicable to bachelors',
     },
@@ -153,7 +151,7 @@ describe('CompilationTabView', () => {
     expect(screen.getByTestId('compilation-reader-col-r3')).toBeInTheDocument();
   });
 
-  it('marks the zero/disagreement row with data attributes used for styling', () => {
+  it('marks the non-compliant/disagreement row with data attributes used for styling', () => {
     render(
       wrap(
         <CompilationTabView
@@ -164,11 +162,11 @@ describe('CompilationTabView', () => {
       )
     );
     const row = screen.getByTestId('compilation-row-1_a');
-    expect(row).toHaveAttribute('data-haszero', 'true');
+    expect(row).toHaveAttribute('data-noncompliant', 'true');
     expect(row).toHaveAttribute('data-disagreement', 'true');
   });
 
-  it('marks the all-agree row without zero or disagreement', () => {
+  it('marks the all-agree row without non-compliance or disagreement', () => {
     render(
       wrap(
         <CompilationTabView
@@ -179,11 +177,11 @@ describe('CompilationTabView', () => {
       )
     );
     const row = screen.getByTestId('compilation-row-1_b');
-    expect(row).toHaveAttribute('data-haszero', 'false');
+    expect(row).toHaveAttribute('data-noncompliant', 'false');
     expect(row).toHaveAttribute('data-disagreement', 'false');
   });
 
-  it('marks excluded rows and hides Set/Change/Clear actions', () => {
+  it('marks excluded rows and hides the Final picker + Clear', () => {
     render(
       wrap(
         <CompilationTabView
@@ -195,59 +193,49 @@ describe('CompilationTabView', () => {
     );
     const row = screen.getByTestId('compilation-row-2_a');
     expect(row).toHaveAttribute('data-excluded', 'true');
-    expect(screen.queryByTestId('compilation-final-edit-2_a')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('compilation-final-compliant-2_a')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('compilation-final-noncompliant-2_a')).not.toBeInTheDocument();
     expect(screen.queryByTestId('compilation-final-clear-2_a')).not.toBeInTheDocument();
   });
 
-  it('beginEdit fires with the row key and current final score', () => {
-    const onBeginEdit = vi.fn();
-    render(
-      wrap(
-        <CompilationTabView
-          {...baseHandlers}
-          onBeginEdit={onBeginEdit}
-          data={sample}
-          isLoading={false}
-        />
-      )
-    );
-    fireEvent.click(screen.getByTestId('compilation-final-edit-1_b'));
-    expect(onBeginEdit).toHaveBeenCalledWith('1', 'b', 2);
+  it("shows each reader's Compliant / Non-compliant mark in their column, with no 0-3 score", () => {
+    render(wrap(<CompilationTabView {...baseHandlers} data={sample} isLoading={false} />));
+    expect(screen.getByTestId('compilation-cell-1_a-r1')).toHaveTextContent('Compliant');
+    expect(screen.getByTestId('compilation-cell-1_a-r1')).not.toHaveTextContent('Non-compliant');
+    expect(screen.getByTestId('compilation-cell-1_a-r3')).toHaveTextContent('Non-compliant');
+    // A reader who did not mark the spec shows a dash.
+    expect(screen.getByTestId('compilation-cell-1_b-r3')).toHaveTextContent('—');
+    const table = screen.getByTestId('compilation');
+    expect(table.textContent).not.toMatch(/0-3|0–3|Score|Partial|Largely/);
+    expect(screen.queryByTestId('score-4-selector')).not.toBeInTheDocument();
   });
 
-  it('inline editor renders the 4-level selector and fires save', () => {
-    const onSaveFinal = vi.fn();
-    render(
-      wrap(
-        <CompilationTabView
-          {...baseHandlers}
-          onSaveFinal={onSaveFinal}
-          data={sample}
-          isLoading={false}
-          editingKey="1_a"
-          pendingFinalScore={2}
-        />
-      )
-    );
-    expect(screen.getByTestId('compilation-final-editor-1_a')).toBeInTheDocument();
-    expect(screen.getByTestId('score-4-selector')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('compilation-final-save-1_a'));
-    expect(onSaveFinal).toHaveBeenCalledWith('1', 'a');
+  it('clicking Non-compliant sets the Final mark for that spec', () => {
+    const onSetFinal = vi.fn();
+    render(wrap(<CompilationTabView {...baseHandlers} onSetFinal={onSetFinal} data={sample} isLoading={false} />));
+    fireEvent.click(screen.getByTestId('compilation-final-noncompliant-1_a'));
+    expect(onSetFinal).toHaveBeenCalledWith('1', 'a', 'noncompliant');
   });
 
-  it('save button is disabled when no pendingFinalScore is set', () => {
-    render(
-      wrap(
-        <CompilationTabView
-          {...baseHandlers}
-          data={sample}
-          isLoading={false}
-          editingKey="1_a"
-          pendingFinalScore={null}
-        />
-      )
-    );
-    expect(screen.getByTestId('compilation-final-save-1_a')).toBeDisabled();
+  it('the current Final mark is pressed; clicking it again is a no-op, the other one switches', () => {
+    const onSetFinal = vi.fn();
+    render(wrap(<CompilationTabView {...baseHandlers} onSetFinal={onSetFinal} data={sample} isLoading={false} />));
+    const c = screen.getByTestId('compilation-final-compliant-1_b');
+    const nc = screen.getByTestId('compilation-final-noncompliant-1_b');
+    expect(c).toHaveAttribute('aria-pressed', 'true');
+    expect(nc).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(c);
+    expect(onSetFinal).not.toHaveBeenCalled();
+    fireEvent.click(nc);
+    expect(onSetFinal).toHaveBeenCalledWith('1', 'b', 'noncompliant');
+    expect(screen.getByText(/Set by Lead Linda/)).toBeInTheDocument();
+  });
+
+  it('no Clear button when no Final mark is set; picker disabled while saving', () => {
+    render(wrap(<CompilationTabView {...baseHandlers} data={sample} isLoading={false} savingKey="1_a" />));
+    expect(screen.queryByTestId('compilation-final-clear-1_a')).not.toBeInTheDocument();
+    expect(screen.getByTestId('compilation-final-compliant-1_a')).toBeDisabled();
+    expect(screen.getByTestId('compilation-final-noncompliant-1_a')).toBeDisabled();
   });
 
   it('clear button fires onClearFinal with the row key', () => {
@@ -338,7 +326,7 @@ describe('CompilationTabView', () => {
       )
     );
     const legend = screen.getByTestId('compilation-legend');
-    expect(legend).toHaveTextContent(/Any reader scored 0/);
+    expect(legend).toHaveTextContent(/Any reader marked Non-compliant/);
     expect(legend).toHaveTextContent(/Disagreement/);
     expect(legend).toHaveTextContent(/All agree/);
     expect(legend).toHaveTextContent(/Excluded/);
