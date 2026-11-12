@@ -17,7 +17,7 @@ const rows: BoardReportRow[] = [
     programName: 'Human Services',
     programLevel: 'bachelors',
     status: 'review_complete',
-    recommendation: 'conditional',
+    recommendation: 'hold',
     decisionOutcome: null,
     completedAt: '2026-10-01T12:00:00.000Z',
     hasAuthoredReport: true,
@@ -43,7 +43,7 @@ describe('BoardReportList', () => {
     expect(r1.getByText('Human Services')).toBeTruthy();
     expect(r1.getByText('Baccalaureate')).toBeTruthy();
     expect(r1.getByText('Oct 1, 2026')).toBeTruthy();
-    expect(r1.getByText('Conditional accreditation')).toBeTruthy();
+    expect(r1.getByText('Hold a decision')).toBeTruthy();
     expect(r1.getByText('Awaiting board decision')).toBeTruthy();
     const r2 = within(screen.getByTestId('board-report-row-s2'));
     expect(r2.getByText('Associate')).toBeTruthy();
