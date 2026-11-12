@@ -12,7 +12,7 @@
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
@@ -22,6 +22,7 @@ import { TourProvider, useTour } from '../features/tour/TourProvider';
 import { HintProvider, useHint } from '../features/tour/HintProvider';
 import { useHelpChatStore } from '../store/helpChatStore';
 import { useAuthStore } from '../store/authStore';
+import { useHelpScreenStore } from '../lib/helpScreens';
 
 function setUser(prefs: any) {
   useAuthStore.setState({
@@ -97,6 +98,31 @@ describe('CR-052 — HelpMenu', () => {
     expect(player).toHaveAttribute('src', '/help-video-file/v.tok');
     expect(screen.getByTestId('help-video-pdf')).toHaveAttribute('href', '/help-video-file/p.tok?download=1');
     expect(screen.getByText('Video · 2:05')).toBeInTheDocument();
+  });
+
+  it('offers the screen\'s related videos and switches to one', async () => {
+    const links = (id: string, title: string) =>
+      HttpResponse.json({ screenId: id, title, videoUrl: `/help-video-file/${id}.tok`, pdfUrl: null });
+    server.use(
+      http.get(/\/api\/help-videos$/, () =>
+        HttpResponse.json({ videos: { 'reader-self-study': { title: 'Reading the self-study' }, 'reader-review': { title: 'Reviewing and commenting' } } })
+      ),
+      http.get(/\/api\/help-videos\/reader-self-study\/links$/, () => links('reader-self-study', 'Reading the self-study')),
+      http.get(/\/api\/help-videos\/reader-review\/links$/, () => links('reader-review', 'Reviewing and commenting'))
+    );
+    useHelpScreenStore.getState().setOverride('reader-self-study');
+    renderHelpMenu('/self-study/abc');
+    fireEvent.click(screen.getByTestId('help-menu-trigger'));
+    expect(await screen.findByTestId('help-video-player', {}, { timeout: 4000 })).toHaveAttribute('src', '/help-video-file/reader-self-study.tok');
+    // reader-report is related too, but has no video yet -> not offered
+    expect(await screen.findByTestId('help-video-related-reader-review')).toBeInTheDocument();
+    expect(screen.queryByTestId('help-video-related-reader-report')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('help-video-related-reader-review'));
+    await waitFor(() =>
+      expect(screen.getByTestId('help-video-player')).toHaveAttribute('src', '/help-video-file/reader-review.tok')
+    );
+    expect(screen.getByTestId('help-video-related-reader-review')).toHaveAttribute('aria-pressed', 'true');
+    useHelpScreenStore.getState().setOverride(null);
   });
 
   it('says a video is coming when the screen has none yet', async () => {

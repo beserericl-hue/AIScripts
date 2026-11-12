@@ -2,7 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Download, FileText, Loader2, MessageCircle, Sparkles, X, PlayCircle } from 'lucide-react';
 import { api } from '../services/api';
-import { HELP_SCREEN_TITLES } from '../lib/helpScreens';
+import { HELP_RELATED, HELP_SCREEN_TITLES } from '../lib/helpScreens';
 
 // The "?" help window: this screen's narrated video, a PDF of the narration
 // with screenshots, and the existing chat + guided-tour entry points.
@@ -35,20 +35,36 @@ function fmtDuration(s?: number): string {
 }
 
 export function HelpVideoModal({ open, screenId, onClose, chat, tour }: HelpVideoModalProps): JSX.Element | null {
+  // Which video is playing: the screen's own, or one picked from "More videos".
+  const [shown, setShown] = React.useState<string | null>(screenId);
+  React.useEffect(() => {
+    if (open) setShown(screenId);
+  }, [open, screenId]);
+  const available = useQuery({
+    queryKey: ['help-videos'],
+    enabled: open,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    queryFn: async () => ((await api.get('/api/help-videos')).data?.videos || {}) as Record<string, { title: string }>,
+  });
+  const related = [screenId, ...(screenId ? HELP_RELATED[screenId] || [] : [])].filter(
+    (id): id is string => !!id && !!available.data?.[id]
+  );
   const q = useQuery({
-    queryKey: ['help-video-links', screenId],
-    enabled: open && !!screenId,
+    queryKey: ['help-video-links', shown],
+    enabled: open && !!shown,
     retry: false,
     staleTime: 30 * 60 * 1000, // links are valid for hours
     queryFn: async () => {
       try {
-        return (await api.get(`/api/help-videos/${screenId}/links`)).data as HelpVideoLinks;
+        return (await api.get(`/api/help-videos/${shown}/links`)).data as HelpVideoLinks;
       } catch (e: any) {
         if (e?.response?.status === 404) return null;
         throw e;
       }
     },
   });
+  const screenIdForQuery = shown;
 
   React.useEffect(() => {
     if (!open) return;
@@ -61,7 +77,7 @@ export function HelpVideoModal({ open, screenId, onClose, chat, tour }: HelpVide
 
   if (!open) return null;
   const v = q.data;
-  const title = v?.title || (screenId ? HELP_SCREEN_TITLES[screenId] : '') || 'Help';
+  const title = v?.title || (screenIdForQuery ? HELP_SCREEN_TITLES[screenIdForQuery] : '') || 'Help';
 
   return (
     <div
@@ -122,6 +138,26 @@ export function HelpVideoModal({ open, screenId, onClose, chat, tour }: HelpVide
             </div>
           )}
         </div>
+
+        {related.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 bg-gray-50 px-5 py-2" data-testid="help-video-related">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">More videos for this screen</span>
+            {related.map((id) => (
+              <button
+                key={id}
+                type="button"
+                data-testid={`help-video-related-${id}`}
+                aria-pressed={id === shown}
+                onClick={() => setShown(id)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  id === shown ? 'border-teal-600 bg-teal-600 text-white' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {available.data?.[id]?.title || HELP_SCREEN_TITLES[id] || id}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 px-5 py-3">
           {v?.pdfUrl && (
