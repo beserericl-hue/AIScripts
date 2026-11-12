@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import { utf8Upload } from '../middleware/utf8Upload';
 import {
   runSectionValidation,
   getWebhookSettings,
@@ -16,7 +17,7 @@ import { sendChatMessage, getHelpChatStatus, uploadHelpDocument, receiveHelpUplo
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { verifyN8nCallback } from '../middleware/verifyN8nCallback';
 
-const helpUpload = multer({
+const helpUpload = utf8Upload({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
