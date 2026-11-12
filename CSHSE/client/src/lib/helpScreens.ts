@@ -33,6 +33,7 @@ export const HELP_SCREEN_TITLES: Record<string, string> = {
   'reader-dashboard': 'Reader dashboard',
   'reader-queue': 'Review queue',
   'reader-review': 'Reviewing a self-study',
+  'reader-self-study': 'Reading the self-study',
   'reader-report': 'Reader Report',
   'reader-report-lead': 'Reader Report (lead reader)',
   messages: 'Messages',

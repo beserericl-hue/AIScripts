@@ -78,7 +78,7 @@ export function narrowBoardSession(req: AuthenticatedRequest): void {
  * DEFAULT-DENY for board sessions. The board is read-only and may reach ONLY
  * the completed Lead Reader Reports plus the session plumbing every signed-in
  * page needs (own profile / preferences, own notifications, bug report, help
- * chat). Every other authenticated API route answers 403 for a board session —
+ * chat, per-screen help videos). Every other authenticated API route answers 403 for a board session —
  * so a future route can never be opened to the board by accident, and a board
  * member's own reader / PC assignments are unusable while acting as board.
  */
@@ -88,6 +88,7 @@ const BOARD_ALLOWED_PREFIXES = [
   '/api/notifications',
   '/api/bug-reports',
   '/api/webhooks/help/',
+  '/api/help-videos',
 ];
 export function boardPathAllowed(url: string): boolean {
   const path = String(url || '').split('?')[0];

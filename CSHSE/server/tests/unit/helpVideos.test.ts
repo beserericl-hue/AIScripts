@@ -90,4 +90,11 @@ describe('per-screen help videos', () => {
       expect((await request(app()).get('/help-video-file/' + t)).status).toBe(403);
     }
   });
+
+  it('board sessions may load help videos', async () => {
+    const { boardPathAllowed } = await vi.importActual<any>('../../src/middleware/auth');
+    expect(boardPathAllowed('/api/help-videos')).toBe(true);
+    expect(boardPathAllowed('/api/help-videos/board-dashboard/links')).toBe(true);
+    expect(boardPathAllowed('/api/help-videos-evil')).toBe(false);
+  });
 });
