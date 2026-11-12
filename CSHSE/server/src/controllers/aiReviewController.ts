@@ -12,6 +12,7 @@
  *   POST   /api/submissions/:submissionId/review/apply      — read aiReviewState, push approved items to the editor
 
  */
+import { syncPartApprovalsFromReview } from '../services/specPartApprovals';
 import { splitReviewStateIntoParts, composeSpecNarrativeHtml } from '../services/specPartSplit';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
@@ -1147,6 +1148,9 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
   // Auto-apply: approving moves the text straight into the editor (replaces the
   // old separate "Apply to editor" button). Idempotent — safe on every call.
   const affected = await materializeApprovedToEditor(submission, req.user?.id);
+  // Approving a numbered part's draft (4.a.2 …) approves that part, so the
+  // rail's "n/4 parts" and the submit gate follow Review.
+  syncPartApprovalsFromReview(submission, req.user?.id);
   await submission.save();
   // 2026-06-09 — instead of synchronously evaluating up to 24 specs (which left
   // the rest un-evaluated), ENQUEUE every affected spec for background AI
@@ -1156,6 +1160,7 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
   res.json({
     ok: true,
     approvedIds: state.approvedIds,
+    specPartApprovals: (submission as any).specPartApprovals || {},
     evidence: (submission as any).__evidenceStats ?? null,
     evalQueued, // how many specs were (re)queued for background evaluation
   });

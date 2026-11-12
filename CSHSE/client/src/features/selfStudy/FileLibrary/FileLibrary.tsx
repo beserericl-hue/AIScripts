@@ -1002,7 +1002,9 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
           )}
           <span className="text-sm font-semibold text-amber-800 flex-shrink-0">Unassigned</span>
           <span className="text-sm text-amber-700/80 truncate flex-1">
-            Imported files awaiting a Standard — use “Assign to Standard” on each
+            {readOnly
+              ? 'Files the program has not filed under a Standard yet'
+              : 'Imported files awaiting a Standard — use “Assign to Standard” on each'}
           </span>
         </button>
           {useRecStatus && (

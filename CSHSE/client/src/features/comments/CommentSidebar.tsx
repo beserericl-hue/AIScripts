@@ -114,6 +114,9 @@ export function CommentSidebar({
       queryClient.invalidateQueries({
         queryKey: ['comments', submissionId, standardCode, specCode]
       });
+      queryClient.invalidateQueries({
+        queryKey: ['comment-summary', submissionId]
+      });
       setReplyingTo(null);
       setReplyContent('');
     }
@@ -128,6 +131,9 @@ export function CommentSidebar({
       queryClient.invalidateQueries({
         queryKey: ['comments', submissionId, standardCode, specCode]
       });
+      queryClient.invalidateQueries({
+        queryKey: ['comment-summary', submissionId]
+      });
     }
   });
 
@@ -141,6 +147,9 @@ export function CommentSidebar({
       queryClient.invalidateQueries({
         queryKey: ['comments', submissionId, standardCode, specCode]
       });
+      queryClient.invalidateQueries({
+        queryKey: ['comment-summary', submissionId]
+      });
     }
   });
 
@@ -152,6 +161,9 @@ export function CommentSidebar({
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ['comments', submissionId, standardCode, specCode]
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['comment-summary', submissionId]
       });
     }
   });

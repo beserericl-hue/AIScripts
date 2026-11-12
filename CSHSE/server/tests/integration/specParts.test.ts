@@ -153,3 +153,50 @@ describe('Specification parts — Review rail', () => {
     expect(Object.keys(stored.aiReviewState.buckets)).toContain('16.d'); // nothing deleted
   });
 });
+
+describe('Specification parts — approving a part\'s draft in Review approves the part', () => {
+  const review = (approvedIds: string[] = []) => ({
+    aiReviewState: {
+      importId: 'imp1',
+      approvedIds,
+      discardedIds: [],
+      buckets: {
+        '4.a': {
+          standardCode: '4', specCode: 'a',
+          narratives: [
+            { sectionId: 's1#part-1', snippet: 'Program goals text', htmlSnippet: '<p>Program goals text</p>', partN: 1, partText: 'Program goals' },
+            { sectionId: 's1#part-2', snippet: 'Assessment plan text', htmlSnippet: '<p>Assessment plan text</p>', partN: 2, partText: 'Assessment plan (include timelines)' },
+            { sectionId: 's1#intro', snippet: 'Intro', htmlSnippet: '<p>Intro</p>', partIntro: true },
+          ],
+          evidenceText: [], evidenceFiles: [],
+        },
+      },
+    },
+  });
+  const parts = async (sub: any, token: string) =>
+    (await request(app).get(`/api/submissions/${sub._id}/spec-parts`).set('Authorization', `Bearer ${token}`)).body.approvals['4_a'] || {};
+
+  it('POSITIVE: approving 4.a.1\'s draft ticks part 1 (only); un-approving withdraws it', async () => {
+    const { sub, token } = await seed('associate', review());
+    const on = await request(app).post(`/api/submissions/${sub._id}/review/set-approved`).set('Authorization', `Bearer ${token}`).send({ approvedIds: ['s1#part-1'] });
+    expect(on.status).toBe(200);
+    expect(Object.keys(on.body.specPartApprovals['4_a'])).toEqual(['1']);
+    expect(Object.keys(await parts(sub, token))).toEqual(['1']);
+    const all = await request(app).post(`/api/submissions/${sub._id}/review/set-approved`).set('Authorization', `Bearer ${token}`).send({ approvedIds: ['s1#part-1', 's1#part-2', 's1#intro'] });
+    expect(Object.keys(all.body.specPartApprovals['4_a']).sort()).toEqual(['1', '2']);
+    await request(app).post(`/api/submissions/${sub._id}/review/set-approved`).set('Authorization', `Bearer ${token}`).send({ approvedIds: ['s1#part-2'] });
+    expect(Object.keys(await parts(sub, token))).toEqual(['2']);
+  });
+
+  it('NEGATIVE: a part ticked by hand stays ticked when its draft is un-approved; parts without a draft stay open', async () => {
+    const { sub, token } = await seed('associate', review());
+    const tick = await request(app).post(`/api/submissions/${sub._id}/spec-parts/approval`).set('Authorization', `Bearer ${token}`).send({ standardCode: '4', specCode: 'a', n: 1, approved: true });
+    expect(tick.status).toBe(200);
+    await request(app).post(`/api/submissions/${sub._id}/review/set-approved`).set('Authorization', `Bearer ${token}`).send({ approvedIds: ['s1#part-1'] });
+    await request(app).post(`/api/submissions/${sub._id}/review/set-approved`).set('Authorization', `Bearer ${token}`).send({ approvedIds: [] });
+    const a = await parts(sub, token);
+    expect(Object.keys(a)).toEqual(['1']);
+    expect(a['3']).toBeUndefined();
+    expect(a['4']).toBeUndefined();
+  });
+});

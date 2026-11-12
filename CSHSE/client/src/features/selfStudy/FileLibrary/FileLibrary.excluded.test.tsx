@@ -34,12 +34,12 @@ const normalFile = {
   metadata: { aiPlacement: aiPick },
 };
 
-function mount(evidence: any[]) {
+function mount(evidence: any[], readOnly = false) {
   (api.get as any).mockImplementation((url: string) =>
     Promise.resolve({ data: url.includes('/standards') ? standards : { evidence } }));
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <FileLibrary submissionId="s1" />
+      <FileLibrary submissionId="s1" readOnly={readOnly} />
     </QueryClientProvider>
   );
 }
@@ -85,5 +85,18 @@ describe('FileLibrary — files excluded from the self-study (curriculum matrix)
     expect(within(unassigned).queryByText('HSR Curriculum Map.docx')).toBeNull();
     // ...and lives in its own excluded section.
     await waitFor(() => expect(screen.getByTestId('file-library-excluded')).toBeTruthy());
+  });
+
+  it('a reader (read-only) gets reader wording for unassigned files, not the Assign hint', async () => {
+    mount([normalFile], true);
+    const unassigned = await screen.findByTestId('file-library-unassigned');
+    expect(unassigned.textContent).toMatch(/Files the program has not filed under a Standard yet/);
+    expect(unassigned.textContent).not.toMatch(/Assign to Standard/);
+  });
+
+  it('the coordinator keeps the Assign hint', async () => {
+    mount([normalFile]);
+    const unassigned = await screen.findByTestId('file-library-unassigned');
+    expect(unassigned.textContent).toMatch(/use “Assign to Standard” on each/);
   });
 });
