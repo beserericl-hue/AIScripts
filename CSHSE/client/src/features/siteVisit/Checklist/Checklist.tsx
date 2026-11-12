@@ -146,10 +146,10 @@ export function ChecklistView({
             <span data-testid="checklist-count-partial">{data.counts.partial} partial (legacy)</span>
           </>
         )}
-        {(data.counts.manual || data.counts.follow_up) && (
+        {(data.counts.manual || 0) + (data.counts.follow_up || 0) > 0 && (
           <>
             <span className="text-slate-400">·</span>
-            <span>{data.counts.manual + data.counts.follow_up} manual / follow-up</span>
+            <span data-testid="checklist-count-manual">{(data.counts.manual || 0) + (data.counts.follow_up || 0)} manual / follow-up</span>
           </>
         )}
         <button

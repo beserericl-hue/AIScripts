@@ -5,6 +5,7 @@ import { Loader2, ChevronLeft, Check, X, FileDown, Lock, Send, ClipboardList } f
 import { api } from '../../../services/api';
 import { useOnceHint } from '../../tour/useOnceHint';
 import { t } from '../../../i18n/strings';
+import { SiteVisitLinks } from '../../siteVisit/SiteVisitLinks';
 
 // ---------------------------------------------------------------------------
 // CR-009 / Sprint 5.1 — Compilation tab (lead reader side-by-side).
@@ -433,7 +434,10 @@ export function CompilationTabView({
               <span className="uppercase">{data.programLevel}</span>
             </p>
           </div>
-          <ReaderReportsLink submissionId={data.submissionId} />
+          <div className="flex flex-wrap items-center gap-2">
+            <SiteVisitLinks submissionId={data.submissionId} role="lead_reader" />
+            <ReaderReportsLink submissionId={data.submissionId} />
+          </div>
         </header>
         {lockedPhase && (
           <AssignmentChangeRequestBox
@@ -464,7 +468,10 @@ export function CompilationTabView({
             <span className="uppercase">{data.programLevel}</span>
           </p>
         </div>
-        <ReaderReportsLink submissionId={data.submissionId} />
+        <div className="flex flex-wrap items-center gap-2">
+          <SiteVisitLinks submissionId={data.submissionId} role="lead_reader" />
+          <ReaderReportsLink submissionId={data.submissionId} />
+        </div>
       </header>
 
       {lockedPhase && (

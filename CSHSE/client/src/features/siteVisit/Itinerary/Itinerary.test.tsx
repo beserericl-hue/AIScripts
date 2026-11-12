@@ -177,3 +177,69 @@ describe('ItineraryView', () => {
     expect(onExport).toHaveBeenCalled();
   });
 });
+
+describe('Itinerary fixes (filming bugs)', () => {
+  function Harness({ initial }: { initial: AgendaSlot[] }) {
+    const [draft, setDraft] = React.useState<AgendaSlot[]>(initial);
+    return (
+      <>
+        <ItineraryView {...handlers} data={makePayload()} isLoading={false} draft={draft} setDraft={setDraft} />
+        <pre data-testid="draft-json">{JSON.stringify(draft)}</pre>
+      </>
+    );
+  }
+  const typeInto = (el: HTMLElement, text: string) => {
+    // one change event per keystroke, like a person typing
+    let v = '';
+    for (const ch of text) {
+      v += ch;
+      fireEvent.change(el, { target: { value: v } });
+    }
+  };
+
+  it('POSITIVE: attendees keep spaces and commas while typing; the agenda gets the parsed list', () => {
+    render(<Harness initial={[{ time: '09:00', activity: 'Welcome' }]} />);
+    const input = screen.getByTestId('itin-slot-0-attendees') as HTMLInputElement;
+    typeInto(input, 'Program Director, Visit team');
+    expect(input.value).toBe('Program Director, Visit team');
+    expect(JSON.parse(screen.getByTestId('draft-json').textContent!)[0].attendees).toEqual(['Program Director', 'Visit team']);
+    fireEvent.blur(input);
+    expect(input.value).toBe('Program Director, Visit team');
+  });
+
+  it('POSITIVE: specs addressed keep "1.a, 2.b" as typed', () => {
+    render(<Harness initial={[{ time: '09:00', activity: 'Welcome' }]} />);
+    const input = screen.getByTestId('itin-slot-0-specs') as HTMLInputElement;
+    typeInto(input, '1.a, 2.b, ');
+    expect(input.value).toBe('1.a, 2.b, ');
+    expect(JSON.parse(screen.getByTestId('draft-json').textContent!)[0].specCodes).toEqual(['1.a', '2.b']);
+    fireEvent.blur(input);
+    expect(input.value).toBe('1.a, 2.b');
+  });
+
+  it('NEGATIVE: removing a slot shows the next slot\'s attendees, not stale text', () => {
+    render(
+      <Harness
+        initial={[
+          { time: '09:00', activity: 'A', attendees: ['Pat'] },
+          { time: '10:00', activity: 'B', attendees: ['Lin', 'Bob'] },
+        ]}
+      />
+    );
+    fireEvent.click(screen.getByTestId('itin-slot-0-remove'));
+    expect((screen.getByTestId('itin-slot-0-attendees') as HTMLInputElement).value).toBe('Lin, Bob');
+  });
+
+  it('shows the scheduled date on the stored calendar day (not a day early)', () => {
+    render(
+      <ItineraryView
+        {...handlers}
+        data={makePayload({ siteVisit: { ...makePayload().siteVisit!, scheduledDate: '2027-03-10T00:00:00.000Z' } })}
+        isLoading={false}
+        draft={[]}
+      />
+    );
+    expect(screen.getByTestId('itinerary').textContent).toContain(new Date(2027, 2, 10).toLocaleDateString());
+    expect(screen.getByTestId('itinerary').textContent).not.toContain(new Date(2027, 2, 9).toLocaleDateString());
+  });
+});

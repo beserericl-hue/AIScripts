@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { BookOpenCheck, ChevronRight, ClipboardList, FileText, Loader2 } from 'lucide-react';
 import { api } from '../../services/api';
+import { SiteVisitLinks } from '../siteVisit/SiteVisitLinks';
 
 const API_BASE = '/api';
 
@@ -153,6 +154,9 @@ export function ReaderSelfStudyPanel(): JSX.Element {
                     <span className="tabular-nums">{p.total}</span> marked overall
                   </div>
                 </div>
+                {it.assignmentType === 'lead_reader' && (
+                  <SiteVisitLinks submissionId={it._id} role="lead_reader" compact className="mt-3 border-t border-gray-100 pt-2" />
+                )}
               </div>
             );
           })}

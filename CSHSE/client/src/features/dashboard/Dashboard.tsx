@@ -30,6 +30,8 @@ import { JointVentureBadge } from '../../components/JointVentureBadge';
 import { WorkflowSummary, type WorkflowSummaryData } from './WorkflowSummary';
 import { ReaderSelfStudyPanel } from './ReaderSelfStudyPanel';
 import RequiredDocuments from '../../components/RequiredDocuments';
+import { dateOnly } from '../../lib/dateOnly';
+import { SiteVisitLinks, siteVisitSubmissionId } from '../siteVisit/SiteVisitLinks';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -416,7 +418,7 @@ export function Dashboard() {
     }).length;
 
     const upcomingSiteVisits = siteVisits.filter((sv) => {
-      const visitDate = new Date(sv.scheduledDate);
+      const visitDate = dateOnly(sv.scheduledDate);
       return isWithinInterval(visitDate, {
         start: new Date(),
         end: addDays(new Date(), 14),
@@ -687,7 +689,7 @@ export function Dashboard() {
                         <div className="flex items-start justify-between">
                           <div>
                             <p className="font-medium text-gray-900">
-                              {format(new Date(sv.scheduledDate), 'EEEE, MMMM d, yyyy')}
+                              {format(dateOnly(sv.scheduledDate), 'EEEE, MMMM d, yyyy')}
                             </p>
                             {sv.teamMembers && sv.teamMembers.length > 0 && (
                               <div className="flex items-center gap-1 mt-2">
@@ -697,6 +699,7 @@ export function Dashboard() {
                                 </span>
                               </div>
                             )}
+                            <SiteVisitLinks submissionId={siteVisitSubmissionId(sv.submissionId)} role={effectiveRole} compact className="mt-2" />
                           </div>
                           <span className={`px-2 py-0.5 text-xs font-medium rounded ${
                             sv.status === 'confirmed'
@@ -1050,7 +1053,7 @@ export function Dashboard() {
                           </p>
                           <p className="text-sm text-gray-500 mt-1">
                             {format(
-                              new Date(sv.scheduledDate),
+                              dateOnly(sv.scheduledDate),
                               'EEEE, MMMM d, yyyy'
                             )}
                           </p>
@@ -1062,6 +1065,7 @@ export function Dashboard() {
                               </span>
                             </div>
                           )}
+                          <SiteVisitLinks submissionId={siteVisitSubmissionId(sv.submissionId)} role={effectiveRole} compact className="mt-2" />
                         </div>
                         <div className="flex flex-col items-end">
                           <span
@@ -1078,7 +1082,7 @@ export function Dashboard() {
                             {sv.status}
                           </span>
                           <span className="text-xs text-gray-400 mt-2">
-                            {formatDistanceToNow(new Date(sv.scheduledDate), {
+                            {formatDistanceToNow(dateOnly(sv.scheduledDate), {
                               addSuffix: true,
                             })}
                           </span>

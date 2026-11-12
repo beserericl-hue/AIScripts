@@ -130,6 +130,25 @@ describe('CR-013 — GET /api/submissions/:id/itinerary', () => {
     expect(res.body.siteVisit).toBeNull();
   });
 
+  it('POSITIVE: the ASSIGNED lead reader gets the no-visit state (200, siteVisit=null), not 403', async () => {
+    const { sid, leadTok, readerTok } = await seed({ withVisit: false });
+    for (const tok of [leadTok, readerTok]) {
+      const res = await request(app).get(`/api/submissions/${sid}/itinerary`).set('Authorization', `Bearer ${tok}`);
+      expect(res.status).toBe(200);
+      expect(res.body.siteVisit).toBeNull();
+      expect(res.body.canCoEdit).toBe(false);
+    }
+  });
+
+  it('NEGATIVE: an unassigned lead reader / other PC still gets 403 when no visit exists', async () => {
+    const { sid, otherPcTok } = await seed({ withVisit: false });
+    const { user: stranger } = await createUser({ role: 'lead_reader' });
+    for (const tok of [otherPcTok, signTokenFor(stranger as any)]) {
+      const res = await request(app).get(`/api/submissions/${sid}/itinerary`).set('Authorization', `Bearer ${tok}`);
+      expect(res.status).toBe(403);
+    }
+  });
+
   it('404 on unknown submission', async () => {
     const { adminTok } = await seed();
     const bogus = new mongoose.Types.ObjectId();

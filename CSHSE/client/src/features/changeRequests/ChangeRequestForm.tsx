@@ -12,6 +12,7 @@ import {
   Info,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { dateOnly } from '../../lib/dateOnly';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -246,7 +247,7 @@ export function ChangeRequestForm({
                   <option value="">Select a site visit...</option>
                   {siteVisits.map((sv) => (
                     <option key={sv._id} value={sv._id}>
-                      {format(new Date(sv.scheduledDate), 'MMMM d, yyyy')} -{' '}
+                      {format(dateOnly(sv.scheduledDate), 'MMMM d, yyyy')} -{' '}
                       {sv.status}
                     </option>
                   ))}
