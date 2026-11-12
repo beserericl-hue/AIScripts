@@ -51,6 +51,7 @@ import { Wizard as AIImportWizard } from './AIImport';
 import { useAIImportStore } from '../../../store/aiImportStore';
 import { useAuthStore } from '../../../store/authStore';
 import { PhaseIndicator } from './PhaseIndicator';
+import { computeSpecGate, notReadyReasons } from '../../../lib/submitReadiness';
 import { useHelpScreen } from '../../../lib/helpScreens';
 
 // Use consistent API paths without relying on environment variable
@@ -2219,35 +2220,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     [submitSelfStudyMutation]
   );
 
-  // Calculate validated specs count for progress display
-  const validationProgress = React.useMemo(() => {
-    if (!standards || !submission?.standardsStatus) {
-      return { validated: 0, total: 0 };
-    }
-
-    let validated = 0;   // specs that PASSED (gates the all-pass submit readiness)
-    let evaluated = 0;   // specs the AI has reviewed at all (pass OR fail)
-    let total = 0;
-
-    for (const standard of standards) {
-      for (const spec of standard.specifications || []) {
-        const status = submission.standardsStatus?.[`${standard.code}_${spec.code}`];
-        // CR-050 — excluded specs drop out of the denominator entirely;
-        // they're not "validated" but also not part of the work that needs
-        // doing. Keeps the X/Y counter honest.
-        if (status?.excluded === true) continue;
-        total++;
-        if (status?.validationStatus === 'pass') validated++;
-        // A spec with any verdict (pass or fail) has been run through validation —
-        // this is what the header "Validated" counter reflects (rises with
-        // Validate-All), distinct from the all-pass submit gate.
-        if (status?.validationStatus === 'pass' || status?.validationStatus === 'fail') evaluated++;
-      }
-    }
-
-    return { validated, evaluated, total };
-  }, [standards, submission?.standardsStatus]);
-
   // CR-045 — count of items waiting in the Drafts (Review) queue, for the
   // PhaseIndicator's "2. Drafts (N)" badge. Mirrors the ReviewSurfaceButton
   // content check but produces a count rather than a boolean.
@@ -2272,37 +2244,38 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     [draftsBuckets, draftsTags, draftsCvs, draftsEvidenceDocs, draftsIntroductions, draftsApprovedIds, draftsDiscardedIds]
   );
 
-  // Check if entire self-study is ready for submission.
-  // CR-050 — a spec is satisfied when validationStatus === 'pass' OR
-  // excluded === true (PC has explicitly marked it not applicable).
-  // Mirrors the server's submitSelfStudy gate so the CTA's enabled state
-  // matches what the server will actually accept.
-  // A spec with numbered parts (4.a.1 …) also needs every part approved.
+  // ONE readiness rule, shared with the PC dashboard, the Final Submit dialog
+  // and the server submit gate (lib/submitReadiness ↔ server
+  // services/submitReadiness): level catalog, Not Applicable removed,
+  // validated = pass OR needs improvement, numbered parts approved, and no
+  // supporting file left unassigned.
   const specPartsState = useSpecParts(submissionId);
-  const isSelfStudyReadyForSubmit = React.useMemo(() => {
-    if (!standards || !submission?.standardsStatus) return false;
-
-    return standards.every(standard =>
-      (standard.specifications || []).every(spec => {
-        const status: any = submission.standardsStatus?.[`${standard.code}_${spec.code}`];
-        // Ready when the spec is substantively addressed (pass OR needs_improvement
-        // — a reader-facing verdict, not a hard fail) or marked Not Applicable.
-        // Only a hard 'fail' or an unassessed spec blocks submit. Legacy rows have
-        // only the binary validationStatus.
-        const v = status?.verdict;
-        if (status?.excluded === true) return true;
-        const partsDone =
-          specPartsState.approvedCount(standard.code, spec.code) ===
-          specPartsState.partsOf(standard.code, spec.code).length;
-        return (
-          partsDone &&
-          (v === 'pass' ||
-            v === 'needs_improvement' ||
-            (v == null && status?.validationStatus === 'pass'))
-        );
-      })
-    );
-  }, [standards, submission?.standardsStatus, specPartsState]);
+  const specGate = React.useMemo(
+    () =>
+      computeSpecGate(standards, submission?.standardsStatus as any, (std, spec) =>
+        specPartsState.partsOf(std, spec).length - specPartsState.approvedCount(std, spec)
+      ),
+    [standards, submission?.standardsStatus, specPartsState]
+  );
+  // Calculate validated specs count for progress display
+  const validationProgress = React.useMemo(
+    () => ({ validated: specGate.validated, evaluated: specGate.evaluated, total: specGate.total }),
+    [specGate]
+  );
+  // Unassigned supporting files block submit (CR-074) — same count the
+  // dashboard shows, from the shared server summary.
+  const readinessSummary = useQuery({
+    queryKey: ['workflow-summary', submissionId],
+    queryFn: async () => (await api.get(`/api/submissions/${submissionId}/workflow-summary`)).data,
+    enabled: !!submissionId && isProgramCoordinator,
+    staleTime: 15_000,
+  });
+  const refetchReadiness = readinessSummary.refetch;
+  useEffect(() => {
+    if (isProgramCoordinator && submissionId) void refetchReadiness();
+  }, [activeView, isProgramCoordinator, submissionId, refetchReadiness]);
+  const unassignedFileCount: number = readinessSummary.data?.submit?.unassignedFiles ?? 0;
+  const isSelfStudyReadyForSubmit = specGate.specsReady && unassignedFileCount === 0;
 
   // Check if submission is already submitted or locked.
   // Status list mirrors server/src/middleware/submissionLockout.ts so the
@@ -2782,9 +2755,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     to PASS (see the disabled-button tooltip). */}
                 <span
                   className="text-sm text-gray-500"
-                  title={`${validationProgress.evaluated} of ${validationProgress.total} specifications reviewed by AI · ${validationProgress.validated} passed`}
+                  title={`${validationProgress.validated} of ${validationProgress.total} specifications validated (pass or needs improvement) · ${validationProgress.evaluated} reviewed by AI`}
                 >
-                  {validationProgress.evaluated}/{validationProgress.total} Validated
+                  {validationProgress.validated}/{validationProgress.total} Validated
                 </span>
 
                 {/* Submit Self-Study Button */}
@@ -2802,7 +2775,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       ? "Self-study has been submitted for review"
                       : isSelfStudyReadyForSubmit
                       ? "Submit self-study for review - this will lock the document"
-                      : `All specifications must PASS validation, with every numbered part approved, before submitting (${validationProgress.validated} of ${validationProgress.total} passed; ${validationProgress.evaluated} reviewed)`
+                      : `Not ready to submit: ${notReadyReasons(specGate, unassignedFileCount).join('; ')}`
                   }
                 >
                   {submitSelfStudyMutation.isPending ? (

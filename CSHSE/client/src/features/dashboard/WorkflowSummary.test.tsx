@@ -165,4 +165,17 @@ describe('WorkflowSummary', () => {
     );
     expect(screen.getByTestId('workflow-summary-loading')).toBeInTheDocument();
   });
+
+  it('says WHY it is not ready — the same reasons the editor shows', () => {
+    renderWith({ submit: { ...baseSummary.submit, validated: 90, total: 96, partsOpen: 2, unassignedFiles: 55, ready: false } as any });
+    expect(screen.getByTestId('dashboard-submit-reasons')).toHaveTextContent(
+      '6 specifications still to validate · 2 with numbered parts to approve · 55 files not assigned to a Standard'
+    );
+    expect(screen.getByTestId('dashboard-submit-cta')).toBeDisabled();
+  });
+
+  it('NEGATIVE: no reasons line when ready', () => {
+    renderWith({ submit: { ...baseSummary.submit, validated: 96, total: 96, ready: true } as any });
+    expect(screen.queryByTestId('dashboard-submit-reasons')).not.toBeInTheDocument();
+  });
 });

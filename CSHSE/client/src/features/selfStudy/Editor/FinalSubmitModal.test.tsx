@@ -105,3 +105,29 @@ describe('FinalSubmitModal — CR-008 preflight', () => {
     expect(screen.getByTestId('final-submit-confirm')).toBeEnabled();
   });
 });
+
+describe('FinalSubmitModal — unassigned files count', () => {
+  const names = Array.from({ length: 25 }, (_, i) => ({ id: String(i), name: `File ${i}.pdf` }));
+  const pf = (total: number): PreflightResult => ({
+    submitDisabled: true,
+    errors: [{ code: 'UNASSIGNED_FILES', message: `${total} uploaded files have not been assigned`, standardCode: '', specCode: '' }],
+    warnings: [],
+    unassignedFiles: names.slice(0, Math.min(25, total)),
+    counts: { totalSpecs: 50, passed: 50, excluded: 0, satisfied: 50, missing: 1, unassignedFiles: total },
+  });
+
+  it('shows the TOTAL from the server (55), not the 25 names it lists', () => {
+    render(<FinalSubmitModal {...baseProps} preflight={pf(55)} />);
+    const box = screen.getByTestId('preflight-unassigned-files');
+    expect(box).toHaveTextContent('55 files not yet assigned to a Standard');
+    expect(box).toHaveTextContent('…and 43 more.');
+    expect(screen.getByTestId('final-submit-confirm')).toBeDisabled();
+  });
+
+  it('NEGATIVE: a small list is counted exactly, with no "more" line', () => {
+    render(<FinalSubmitModal {...baseProps} preflight={pf(3)} />);
+    const box = screen.getByTestId('preflight-unassigned-files');
+    expect(box).toHaveTextContent('3 files not yet assigned to a Standard');
+    expect(box).not.toHaveTextContent('more.');
+  });
+});

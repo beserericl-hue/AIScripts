@@ -23,7 +23,7 @@ import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { SelfStudyImport } from '../../src/models/SelfStudyImport';
 import { SupportingEvidence } from '../../src/models/SupportingEvidence';
-import { getAllStandards } from '../../src/data/standards';
+import { getLevelStandards } from '../../src/data/levelStandards';
 import { createUser, signTokenFor } from '../helpers/factories';
 
 // --- Helpers --------------------------------------------------------------
@@ -113,9 +113,11 @@ function makeReviewState() {
   };
 }
 
+// The submission's LEVEL catalog (bachelors) — the same list the editor and
+// the submit gate use (services/submitReadiness), not the flat legacy catalog.
 function computeSpecsTotal(): number {
   let total = 0;
-  for (const s of getAllStandards()) total += (s.specifications || []).length;
+  for (const s of getLevelStandards('bachelors') || []) total += (s.specifications || []).length;
   return total;
 }
 
@@ -277,14 +279,16 @@ describe('GET /api/submissions/:id/workflow-summary — count correctness', () =
 
     // SELF-STUDY
     expect(res.body.selfStudy.specsTotal).toBe(computeSpecsTotal());
-    expect(res.body.selfStudy.specsValidated).toBe(2); // 1.a pass + 2.c validated
+    // 1.a has an AI pass. 2.c only carries status 'validated' with no AI
+    // verdict — not validated under the shared rule (the editor never counted it).
+    expect(res.body.selfStudy.specsValidated).toBe(1);
     expect(res.body.selfStudy.narrativesWritten).toBe(2); // 1.a + 2.c (1.b empty)
     // The curriculum matrix was removed (CSHSE board, Nov 2026) — no matrix count.
     expect('matrixRows' in res.body.selfStudy).toBe(false);
     expect(res.body.selfStudy.evidenceFiles).toBe(2); // soft-deleted excluded
 
     // SUBMIT
-    expect(res.body.submit.validated).toBe(2);
+    expect(res.body.submit.validated).toBe(1);
     expect(res.body.submit.total).toBe(computeSpecsTotal());
     expect(res.body.submit.ready).toBe(false); // not all specs validated
   });

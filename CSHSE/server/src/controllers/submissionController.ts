@@ -23,31 +23,10 @@ import { partApprovalsOf, unapprovedParts } from '../services/specPartApprovals'
 import { ingestCorrection } from '../services/cshseAiClient';
 import { ensureInstitutionReaderAssignments } from '../services/readerAssignmentService';
 import mongoose from 'mongoose';
-import { notCurriculumMatrixFilter } from '../services/curriculumMatrixExclusion';
+import { catalogFor, computeSpecGate, computeSubmitReadiness, findUnassignedEvidence } from '../services/submitReadiness';
 
-/**
- * CR-074 — a self-study cannot be submitted while supporting files remain
- * unassigned to a Standard. Once submitted the study is read-only, so a file
- * the PC uploaded but never classified would be stranded, invisible, and never
- * reach a reader. Mirrors the Review banner's "N not yet assigned to a
- * Standard" count (listEvidence: isDeleted:false, no standardCode), excluding
- * system-generated artifacts (reader-report PDFs/DOCX) which legitimately carry
- * no standardCode.
- */
-async function findUnassignedEvidence(submissionId: string) {
-  return SupportingEvidence.find({
-    submissionId: new mongoose.Types.ObjectId(submissionId),
-    isDeleted: false,
-    $or: [{ standardCode: { $exists: false } }, { standardCode: null }, { standardCode: '' }],
-    tags: { $not: { $elemMatch: { $regex: /^reader-report/ } } },
-    // A curriculum matrix stays un-assigned by design (not part of the self-study),
-    // so it never blocks submission.
-    ...notCurriculumMatrixFilter(),
-  })
-    .select('_id file.originalName title')
-    .lean();
-}
-
+// CR-074 unassigned-file rule + the spec gate live in services/submitReadiness
+// (one definition for dashboard, preflight, Needs-Improvement list and submit).
 interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
@@ -555,28 +534,14 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
     );
 
     // -- SELF-STUDY: committed content ------------------------------
-    const allStandards = getAllStandards();
-    let specsTotal = 0;
-    for (const s of allStandards) specsTotal += (s.specifications || []).length;
-    let specsValidated = 0;
-    let specsExcluded = 0;
-    if (submission.standardsStatus) {
-      submission.standardsStatus.forEach((v: any) => {
-        // CR-050 — excluded specs drop out of the work-to-do; they count
-        // toward submit readiness (pass-OR-excluded) but not toward the
-        // "X / Y validated" narrative-completion gauge.
-        if (v?.excluded === true) {
-          specsExcluded++;
-          return;
-        }
-        const vs = v?.validationStatus;
-        const st = v?.status;
-        if (vs === 'pass' || st === 'validated' || st === 'complete' || st === 'submitted') {
-          specsValidated++;
-        }
-      });
-    }
-    const specsRequired = Math.max(0, specsTotal - specsExcluded);
+    // One definition (services/submitReadiness): the submission's LEVEL
+    // catalog, Not Applicable removed, validated = pass OR needs improvement.
+    // Intro / non-spec status rows never count (was "98 of 83 · 118%").
+    const readiness = await computeSubmitReadiness(submission);
+    const specsValidated = readiness.validated;
+    const specsExcluded = readiness.excluded;
+    const specsRequired = readiness.total;
+    const specsTotal = readiness.total;
     // narratives written — count specs with non-empty content.
     let narrativesWritten = 0;
     const narr: any = submission.narratives;
@@ -608,9 +573,6 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
       deadline = inst?.accreditationDeadline ?? null;
     }
 
-    // CR-050 — submit readiness counts pass-OR-excluded; the gauge shows
-    // (validated + excluded) / total so the user sees credit for N/A.
-    const specsReady = specsValidated + specsExcluded;
     return res.json({
       import: importInfo,
       drafts: { cvs, syllabi, papers, introductions, specItems, bySpec, reviewed },
@@ -619,6 +581,7 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
         specsExcluded,
         specsRequired,
         specsTotal,
+        catalogTotal: readiness.catalogTotal,
         narrativesWritten,
         evidenceFiles
       },
@@ -627,7 +590,11 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
         validated: specsValidated,
         excluded: specsExcluded,
         total: specsTotal,
-        ready: specsTotal > 0 && specsReady === specsTotal
+        failed: readiness.failed,
+        notEvaluated: readiness.notEvaluated,
+        partsOpen: readiness.partsOpen,
+        unassignedFiles: readiness.unassignedFiles,
+        ready: readiness.ready
       }
     });
   } catch (error) {
@@ -1180,16 +1147,8 @@ export const getSubmissionPreflight = async (req: AuthenticatedRequest, res: Res
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    // Level-aware catalog (matches the client gate + submitSelfStudy).
-    const allStandards = getLevelStandards(submission.programLevel) || getAllStandards();
-
-    // standardsStatus may be a Map (live model) or plain object (.lean()).
-    const ssRaw = submission.standardsStatus;
-    const getStatus = (key: string): any => {
-      if (!ssRaw) return undefined;
-      if (ssRaw instanceof Map) return ssRaw.get(key);
-      return ssRaw[key];
-    };
+    // One spec gate shared with the dashboard + submit (services/submitReadiness).
+    const gate = computeSpecGate(submission);
 
     // narratives may also be a Map or plain object after .lean().
     const narrativesRaw = submission.narratives;
@@ -1215,80 +1174,59 @@ export const getSubmissionPreflight = async (req: AuthenticatedRequest, res: Res
       specCode?: string;
     }> = [];
 
-    let totalSpecs = 0;
-    let passedCount = 0;
-    let niCount = 0;
-    let excludedCount = 0;
-
-    for (const standard of allStandards) {
-      for (const spec of standard.specifications || []) {
-        totalSpecs++;
-        const key = `${standard.code}_${spec.code}`;
-        const status = getStatus(key);
-        const v = status?.verdict;
-        const excluded = status?.excluded === true;
-        const passedStrict = v === 'pass' || (v == null && status?.validationStatus === 'pass');
-        const needsImprovement = v === 'needs_improvement';
-        // Gate: pass OR needs_improvement OR N/A clears; a hard 'fail' verdict
-        // or an unevaluated spec blocks.
-        const ok = passedStrict || needsImprovement || excluded;
-
-        if (passedStrict) passedCount++;
-        if (needsImprovement) niCount++;
-        if (excluded) excludedCount++;
-
-        if (ok) {
-          if (needsImprovement) {
-            warnings.push({
-              code: 'NEEDS_IMPROVEMENT',
-              message: `Standard ${standard.code}.${spec.code} passed as "needs improvement". You can submit, but you may want to strengthen it first.`,
-              standardCode: standard.code,
-              specCode: spec.code
-            });
-          }
-        } else {
-          // Hard error — submit gate will refuse. Distinguish the common
-          // sub-cases so the modal can be actionable ("write narrative" vs
-          // "ask AI to re-evaluate" vs "mark N/A").
-          const narrative = getNarrative(standard.code, spec.code);
-          const html = narrative?.content || '';
-          const hasContent =
-            typeof html === 'string' && html.replace(/<[^>]*>/g, '').trim().length > 0;
-          if (!hasContent) {
-            errors.push({
-              code: 'NARRATIVE_MISSING',
-              message: `Standard ${standard.code}.${spec.code} has no narrative. Write content, or mark it Not Applicable.`,
-              standardCode: standard.code,
-              specCode: spec.code
-            });
-          } else if (v === 'fail' || status?.validationStatus === 'fail') {
-            errors.push({
-              code: 'VALIDATION_FAILED',
-              message: `Standard ${standard.code}.${spec.code} did not pass the AI evaluator. Address the rationale or mark it Not Applicable.`,
-              standardCode: standard.code,
-              specCode: spec.code
-            });
-          } else {
-            errors.push({
-              code: 'NOT_EVALUATED',
-              message: `Standard ${standard.code}.${spec.code} has not been evaluated yet. Run AI Review on it, or mark it Not Applicable.`,
-              standardCode: standard.code,
-              specCode: spec.code
-            });
-          }
-        }
-        // A spec with numbered parts (4.a.1 …) also needs every part approved.
-        const openParts = excluded ? [] : unapprovedParts(submission, standard.code, spec.code);
-        if (openParts.length) {
+    for (const row of gate.rows) {
+      const { standardCode, specCode, state } = row;
+      if (state === 'needs_improvement') {
+        warnings.push({
+          code: 'NEEDS_IMPROVEMENT',
+          message: `Standard ${standardCode}.${specCode} passed as "needs improvement". You can submit, but you may want to strengthen it first.`,
+          standardCode,
+          specCode
+        });
+      } else if (state === 'fail' || state === 'not_evaluated') {
+        // Hard error — submit gate will refuse. Distinguish the common
+        // sub-cases so the modal can be actionable ("write narrative" vs
+        // "ask AI to re-evaluate" vs "mark N/A").
+        const narrative = getNarrative(standardCode, specCode);
+        const html = narrative?.content || '';
+        const hasContent = typeof html === 'string' && html.replace(/<[^>]*>/g, '').trim().length > 0;
+        if (!hasContent) {
           errors.push({
-            code: 'PARTS_NOT_APPROVED',
-            message: `Standard ${standard.code}.${spec.code} has ${openParts.length} numbered part${openParts.length === 1 ? '' : 's'} not yet approved (${openParts.map((p) => `${standard.code}.${spec.code}.${p.n}`).join(', ')}). Approve each part in Review or the Editor.`,
-            standardCode: standard.code,
-            specCode: spec.code
+            code: 'NARRATIVE_MISSING',
+            message: `Standard ${standardCode}.${specCode} has no narrative. Write content, or mark it Not Applicable.`,
+            standardCode,
+            specCode
+          });
+        } else if (state === 'fail') {
+          errors.push({
+            code: 'VALIDATION_FAILED',
+            message: `Standard ${standardCode}.${specCode} did not pass the AI evaluator. Address the rationale or mark it Not Applicable.`,
+            standardCode,
+            specCode
+          });
+        } else {
+          errors.push({
+            code: 'NOT_EVALUATED',
+            message: `Standard ${standardCode}.${specCode} has not been evaluated yet. Run AI Review on it, or mark it Not Applicable.`,
+            standardCode,
+            specCode
           });
         }
       }
+      // A spec with numbered parts (4.a.1 …) also needs every part approved.
+      if (row.openParts.length) {
+        errors.push({
+          code: 'PARTS_NOT_APPROVED',
+          message: `Standard ${standardCode}.${specCode} has ${row.openParts.length} numbered part${row.openParts.length === 1 ? '' : 's'} not yet approved (${row.openParts.map((n) => `${standardCode}.${specCode}.${n}`).join(', ')}). Approve each part in Review or the Editor.`,
+          standardCode,
+          specCode
+        });
+      }
     }
+    const totalSpecs = gate.catalogTotal;
+    const passedCount = gate.passed;
+    const niCount = gate.needsImprovement;
+    const excludedCount = gate.excluded;
 
     // Warning: lots of excluded specs may mean the program scope is wrong.
     if (excludedCount > totalSpecs * 0.25) {
@@ -1334,6 +1272,9 @@ export const getSubmissionPreflight = async (req: AuthenticatedRequest, res: Res
         needsImprovement: niCount,
         excluded: excludedCount,
         satisfied: passedCount + niCount + excludedCount,
+        // the same "validated of applicable" the dashboard + editor show
+        validated: gate.validated,
+        applicable: gate.total,
         missing: errors.length,
         unassignedFiles: unassigned.length
       }
@@ -1880,21 +1821,38 @@ export const getNeedsImprovement = async (req: AuthenticatedRequest, res: Respon
   try {
     const submission = await requireSubmissionAccess(req as any, res, req.params.submissionId);
     if (!submission) return;
-    const structure = await getReaderReportStructure(String(submission._id));
-    const items: any[] = [];
+    // The list comes from the SAME source as the spec statuses (and the
+    // dashboard / preflight "needs improvement" count): standardsStatus
+    // verdict === 'needs_improvement' on an applicable spec of the level
+    // catalog. Stored AI results only supply the rationale text — and an
+    // errored evaluation ("evaluation error (…)") is never shown as one.
+    // The access check loads only id/owner/status — read the statuses here.
+    const full: any = await Submission.findById(submission._id)
+      .select('programLevel standardsStatus specPartApprovals')
+      .lean();
+    const gate = computeSpecGate(full);
+    const niRows = gate.rows.filter((r) => r.state === 'needs_improvement');
+    const structure = niRows.length ? await getReaderReportStructure(String(submission._id)) : null;
+    const textOf = new Map<string, { standardTitle: string; specTitle: string; aiComment: string }>();
     for (const s of structure?.standards || []) {
       for (const sp of s.specs || []) {
-        if (sp.verdict === 'needs_improvement') {
-          items.push({
-            standardCode: s.code,
-            specCode: sp.specCode,
-            standardTitle: s.title,
-            specTitle: sp.specTitle,
-            rationale: sp.aiComment || '',
-          });
-        }
+        textOf.set(`${s.code}.${sp.specCode}`, { standardTitle: s.title, specTitle: sp.specTitle, aiComment: sp.aiComment || '' });
       }
     }
+    const catalog = new Map<string, string>();
+    for (const std of catalogFor(full?.programLevel)) catalog.set(String(std.code), std.title);
+    const ERRORED = /evaluation (error|unavailable)|NotFoundError|AI evaluation unavailable/i;
+    const items = niRows.map((r) => {
+      const t = textOf.get(`${r.standardCode}.${r.specCode}`);
+      const rationale = t?.aiComment && !ERRORED.test(t.aiComment) ? t.aiComment : '';
+      return {
+        standardCode: r.standardCode,
+        specCode: r.specCode,
+        standardTitle: t?.standardTitle || catalog.get(r.standardCode) || '',
+        specTitle: t?.specTitle || '',
+        rationale,
+      };
+    });
     return res.json({ items });
   } catch (err: any) {
     console.error('[getNeedsImprovement] failed:', err);
@@ -1917,7 +1875,7 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
     }
 
     // Check if already submitted
-    if (submission.status === 'submitted' || submission.status === 'under_review') {
+    if (['submitted', 'readers_assigned', 'under_review', 'review_complete', 'compliant', 'non_compliant'].includes(String(submission.status))) {
       return res.status(400).json({ error: 'Self-study has already been submitted' });
     }
 
@@ -1951,39 +1909,22 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
     // the same source the client gate + /api/standards use — NOT the flat
     // level-agnostic getAllStandards() (which has a different spec set and
     // would block an associate program on specs it doesn't even have).
-    const allStandards = getLevelStandards(submission.programLevel) || getAllStandards();
-    if (!allStandards || allStandards.length === 0) {
+    const gate = computeSpecGate(submission);
+    if (gate.catalogTotal === 0) {
       return res.status(500).json({ error: 'Standards definitions unavailable' });
     }
 
-    // Verify every spec clears the gate: verdict pass OR needs_improvement, or
-    // explicitly marked N/A (excluded). A hard 'fail' verdict, or a spec that
-    // was never evaluated, still blocks submission so accidental omissions and
-    // genuine deficiencies don't slip through.
-    const standardsStatus = submission.standardsStatus || new Map();
+    // Verify every spec clears the gate (services/submitReadiness — the same
+    // rule the dashboard and the Final Submit dialog show): verdict pass OR
+    // needs_improvement, or marked N/A; numbered parts all approved. A hard
+    // 'fail' or a never-evaluated spec blocks.
     const missingValidations: string[] = [];
-
-    for (const standard of allStandards) {
-      for (const spec of standard.specifications || []) {
-        const statusKey = `${standard.code}_${spec.code}`;
-        const status = standardsStatus instanceof Map
-          ? standardsStatus.get(statusKey)
-          : standardsStatus[statusKey];
-
-        // pass OR needs_improvement OR N/A clears; a hard 'fail' verdict or an
-        // unevaluated spec blocks. Legacy rows have only the binary
-        // validationStatus (verdict absent) → fall back to it.
-        const v = status?.verdict;
-        const ok = v === 'pass' || v === 'needs_improvement'
-          || (v == null && status?.validationStatus === 'pass')
-          || status?.excluded === true;
-        if (!ok) {
-          missingValidations.push(`Standard ${standard.code}, Spec ${spec.code}`);
-        }
-        const openParts = status?.excluded === true ? [] : unapprovedParts(submission, standard.code, spec.code);
-        if (openParts.length) {
-          missingValidations.push(`Standard ${standard.code}, Spec ${spec.code}: parts ${openParts.map((p) => p.n).join(', ')} not approved`);
-        }
+    for (const row of gate.rows) {
+      if (row.state === 'fail' || row.state === 'not_evaluated') {
+        missingValidations.push(`Standard ${row.standardCode}, Spec ${row.specCode}`);
+      }
+      if (row.openParts.length) {
+        missingValidations.push(`Standard ${row.standardCode}, Spec ${row.specCode}: parts ${row.openParts.join(', ')} not approved`);
       }
     }
 
@@ -2040,8 +1981,8 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
     // received an Assignment doc on submit and the study never reached their
     // dashboard (the Lauri/AACC bug). Reconcile Assignment docs now so the
     // submitted study is visible the moment it lands. Idempotent + fail-soft;
-    // status stays 'submitted' (explicit assignReaders still owns
-    // readers_assigned). Mirrors leadReader/assignedReaders onto the submission.
+    // when reviewers are assigned the status advances to 'readers_assigned'.
+    // Mirrors leadReader/assignedReaders onto the submission.
     try {
       const imp = (req.user as any)?.impersonation;
       const { assignedUsers } = await ensureInstitutionReaderAssignments(submission, {
