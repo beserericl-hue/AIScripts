@@ -1,4 +1,4 @@
-import { summaryNames } from './institutionPeople';
+import { summaryNames, leadReadersFor, fullName } from './institutionPeople';
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
@@ -287,12 +287,25 @@ export function InstitutionManagement() {
     );
     setRolesMutation.mutate({ userId: user._id, roleAssignments: next });
   };
+  const unassignSlotLeadMutation = useMutation({
+    mutationFn: async (institutionId: string) => (await api.delete(`/api/institutions/${institutionId}/lead-reader`)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users-for-roster'] });
+      queryClient.invalidateQueries({ queryKey: ['institutions'] });
+      setRosterError(null);
+    },
+    onError: (e: any) => setRosterError(e?.response?.data?.error || 'Failed to remove lead reader'),
+  });
+  /** Lead readers shown on the card AND in the list — one source, so they agree. */
+  const leadsFor = (institution: any): any[] =>
+    leadReadersFor(institution.assignedLeadReaderId, rosterFor(institution._id, 'lead_reader'), allUsers);
   const renderRoleGroup = (
     institutionId: string,
     role: 'program_coordinator' | 'reader' | 'lead_reader',
-    label: string
+    label: string,
+    institution?: any
   ) => {
-    const members = rosterFor(institutionId, role);
+    const members = role === 'lead_reader' && institution ? leadsFor(institution) : rosterFor(institutionId, role);
     const memberIds = new Set(members.map((m: any) => String(m._id)));
     const candidates = allUsers.filter((u: any) => !u.isSuperuser && u.role !== 'admin' && !memberIds.has(String(u._id)));
     return (
@@ -304,8 +317,8 @@ export function InstitutionManagement() {
             <span key={m._id} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs text-gray-700 ring-1 ring-gray-200">
               {m.firstName} {m.lastName}
               <button
-                onClick={() => removeRole(m, role, institutionId)}
-                disabled={setRolesMutation.isPending}
+                onClick={() => (m.slotOnly ? unassignSlotLeadMutation.mutate(institutionId) : removeRole(m, role, institutionId))}
+                disabled={setRolesMutation.isPending || unassignSlotLeadMutation.isPending}
                 className="text-gray-400 hover:text-red-600 disabled:opacity-40"
                 title="Remove"
               >×</button>
@@ -519,10 +532,10 @@ export function InstitutionManagement() {
                         );
                       })()}
 
-                      {summaryNames(institution.assignedLeadReaderId, rosterFor(institution._id, 'lead_reader')).length ? (
+                      {leadsFor(institution).length ? (
                         <span className="flex items-center gap-1 text-sm text-blue-600" data-testid={`inst-lead-${institution._id}`}>
                           <Users className="w-4 h-4" />
-                          Lead Reader: {summaryNames(institution.assignedLeadReaderId, rosterFor(institution._id, 'lead_reader')).join(', ')}
+                          {leadsFor(institution).length > 1 ? 'Lead Readers' : 'Lead Reader'}: {leadsFor(institution).map(fullName).join(', ')}
                         </span>
                       ) : (
                         <div className="flex items-center gap-2">
@@ -574,7 +587,7 @@ export function InstitutionManagement() {
                     cannot be PC and reviewer at the same institution (Rule 1). */}
                 <div className="mt-4 grid grid-cols-1 gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 md:grid-cols-3">
                   {renderRoleGroup(institution._id, 'program_coordinator', 'Program Coordinators')}
-                  {renderRoleGroup(institution._id, 'lead_reader', 'Lead Readers')}
+                  {renderRoleGroup(institution._id, 'lead_reader', 'Lead Readers', institution)}
                   {renderRoleGroup(institution._id, 'reader', 'Readers')}
                 </div>
               </div>

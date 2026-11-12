@@ -30,3 +30,24 @@ export function summaryNames(legacy: PersonLike | null | undefined, roster: Pers
   roster.forEach(add);
   return names;
 }
+
+/**
+ * The institution's lead readers: everyone with a lead_reader assignment there
+ * (the roster) PLUS the legacy single-slot lead (`assignedLeadReaderId`), which
+ * is a real assignment — submit auto-assigns the lead from it. Slot-only people
+ * are marked `slotOnly` so removing them clears the slot. The card line and the
+ * Lead Readers list both use this, so they always agree.
+ */
+export function leadReadersFor<T extends PersonLike>(
+  slot: PersonLike | string | null | undefined,
+  roster: T[],
+  allUsers: T[] = []
+): Array<T & { slotOnly?: boolean }> {
+  const out: Array<T & { slotOnly?: boolean }> = roster.map((p) => ({ ...p }));
+  if (!slot) return out;
+  const slotId = typeof slot === 'string' ? slot : String(slot._id || '');
+  if (!slotId || out.some((p) => String(p._id) === slotId)) return out;
+  const person = (allUsers.find((u) => String(u._id) === slotId) || (typeof slot === 'string' ? null : slot)) as T | null;
+  if (person && fullName(person)) out.unshift({ ...person, _id: slotId, slotOnly: true });
+  return out;
+}
