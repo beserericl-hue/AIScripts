@@ -38,6 +38,7 @@ import { APIKey } from '../models/APIKey';
 // CR-017 isolation support — seed router optionally links user+submission
 // to a real Institution doc so the cross-institution guard can fire.
 import { Institution } from '../models/Institution';
+import { sweepStaleE2ESeeds } from '../services/e2eSeedSweeper';
 
 const FIXTURE_DIR = path.join(__dirname, '..', 'test', 'fixtures');
 
@@ -128,8 +129,23 @@ function startJanitor(): void {
         ACTIVE_SEEDS.delete(token);
       }
     }
+    await runDurableSweep();
   }, 60 * 60 * 1000);
   janitorTimer.unref();
+}
+
+/**
+ * The in-memory map above is lost on every restart / redeploy, which is how
+ * dev leaked 56 seeds. This sweep finds stale seeds in the database itself
+ * (submissionId "E2E-…", seed-user emails) — see services/e2eSeedSweeper.
+ */
+async function runDurableSweep(): Promise<void> {
+  try {
+    const r = await sweepStaleE2ESeeds();
+    if (r.submissions || r.users) console.log('[seed-janitor] swept stale E2E seeds', JSON.stringify(r));
+  } catch (err) {
+    console.error('[seed-janitor] durable sweep failed', err);
+  }
 }
 
 export function buildTestRouter(): Router | null {
@@ -164,6 +180,10 @@ export function buildTestRouter(): Router | null {
       '[test-router] mounting under NODE_ENV=production — verify this is a development environment (cshse-develop, not prod)'
     );
   }
+
+  // Sweep seeds leaked by earlier processes shortly after boot, then hourly.
+  startJanitor();
+  setTimeout(() => void runDurableSweep(), 60 * 1000).unref();
 
   const router = express.Router();
   router.use(express.json({ limit: '2mb' }));

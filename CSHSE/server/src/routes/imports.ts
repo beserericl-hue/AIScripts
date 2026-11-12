@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import { utf8Upload } from '../middleware/utf8Upload';
 import {
   uploadDocument,
   getImport,
@@ -89,7 +90,7 @@ router.use(authenticate);
 
 // Configure multer for file uploads
 const storage = multer.memoryStorage();
-const upload = multer({
+const upload = utf8Upload({
   storage,
   limits: {
     fileSize: 50 * 1024 * 1024, // 50MB limit

@@ -31,6 +31,7 @@ import { extractFileText, reviewCoverage, xrefPlacement } from '../services/cshs
 import { suggestStandardForFile, NarrativeTuple, titleFromFilename, folderStandardFromPath } from '../services/evidenceStandardSuggester';
 import { indexEvidenceFile, indexAllForSubmission } from '../services/evidenceIndexer';
 import { signFileAccessToken } from '../services/fileAccessToken';
+import { fixUploadFilename } from '../middleware/utf8Upload';
 import { getLevelStandards, normalizeLevel } from '../data/levelStandards';
 import {
   CURRICULUM_MATRIX_EXCLUDED_TAG,
@@ -2622,19 +2623,10 @@ export async function getReviewEvidenceDocPublicUrl(req: AuthenticatedRequest, r
 // AI cross-reference placement of UNASSIGNED supporting-evidence files
 // ============================================================================
 
-/** Multer decodes multipart filenames as latin1 — "Program Differentiators –
- *  ETSU" arrives as "Program Differentiators â\u0080\u0093 ETSU". Undo it when
- *  the string round-trips cleanly as UTF-8. */
-export function fixLatin1Filename(name: string): string {
-  const s = String(name || '');
-  if (!/[\u0080-\u00ff]/.test(s)) return s;
-  try {
-    const fixed = Buffer.from(s, 'latin1').toString('utf8');
-    return fixed.includes('\ufffd') ? s : fixed;
-  } catch {
-    return s;
-  }
-}
+/** Multer decodes multipart filenames as latin1. Every upload route now uses
+ *  utf8Upload (middleware/utf8Upload), which repairs them on arrival; this
+ *  alias still repairs names stored before that fix when they are displayed. */
+export const fixLatin1Filename = fixUploadFilename;
 
 /** Text extraction with one retry — under a large folder upload the
  *  ai-service extractor sometimes times out (ETSU: 15 Word/Excel files that

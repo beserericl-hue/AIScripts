@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import { utf8Upload } from '../middleware/utf8Upload';
 import {
   uploadFile,
   getFile,
@@ -58,7 +59,7 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
  * - 50MB file size limit
  * - Validates file types
  */
-const upload = multer({
+const upload = utf8Upload({
   storage,
   fileFilter,
   limits: {
