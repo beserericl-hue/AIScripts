@@ -72,9 +72,14 @@ export function OverflowNav<T extends OverflowNavItem>({ items, renderItem, alwa
 
   return (
     <div ref={wrapRef} className="relative min-w-0 flex-1">
-      {/* Off-screen measuring layer — always holds every item at full size. */}
-      <div ref={measureRef} aria-hidden className="invisible pointer-events-none absolute left-0 top-0 -z-10 flex items-center gap-2 whitespace-nowrap">
-        {items.map((it) => <div key={it.key}>{renderItem(it, false)}</div>)}
+      {/* Off-screen measuring layer — always holds every item at full size.
+          It sits inside a 0×0 overflow-hidden box: an absolutely positioned
+          element still counts toward its ancestors' scrollable overflow, so
+          a bare full-width row here made the whole page scroll sideways. */}
+      <div aria-hidden data-testid="nav-measure-clip" className="pointer-events-none absolute left-0 top-0 h-0 w-0 overflow-hidden">
+        <div ref={measureRef} className="invisible absolute left-0 top-0 flex w-max items-center gap-2 whitespace-nowrap">
+          {items.map((it) => <div key={it.key}>{renderItem(it, false)}</div>)}
+        </div>
       </div>
       {/* Visible layer. */}
       <div className="flex items-center gap-2">
