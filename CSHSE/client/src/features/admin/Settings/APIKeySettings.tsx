@@ -15,6 +15,7 @@ import {
   Clock,
   Shield
 } from 'lucide-react';
+import { ConfirmDialog } from '../../../components/ConfirmDialog';
 
 interface APIKey {
   _id: string;
@@ -73,6 +74,7 @@ export function APIKeySettings() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['api-keys'] });
+      setPending(null);
       setNewKeyData({
         key: data.apiKey.key,
         name: data.apiKey.name,
@@ -89,6 +91,9 @@ export function APIKeySettings() {
     }
   });
 
+  // Rotate / Revoke take effect immediately — confirm first.
+  const [pending, setPending] = useState<{ kind: 'rotate' | 'revoke'; key: APIKey } | null>(null);
+
   // Revoke API key mutation
   const revokeMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -96,6 +101,7 @@ export function APIKeySettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['api-keys'] });
+      setPending(null);
     }
   });
 
@@ -107,6 +113,7 @@ export function APIKeySettings() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['api-keys'] });
+      setPending(null);
       setNewKeyData({
         key: data.apiKey.key,
         name: data.apiKey.name,
@@ -148,6 +155,24 @@ export function APIKeySettings() {
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog
+        open={!!pending}
+        testId="api-key-confirm"
+        title={pending?.kind === 'rotate' ? `Rotate “${pending?.key.name}”?` : `Revoke “${pending?.key.name}”?`}
+        message={
+          pending?.kind === 'rotate'
+            ? 'A new key is issued and the current key stops working immediately. Anything still using the old key (for example the n8n workflow) will fail until you give it the new key, which is shown only once.'
+            : 'The key stops working immediately and cannot be restored. Anything still using it (for example the n8n workflow) will be refused.'
+        }
+        confirmLabel={pending?.kind === 'rotate' ? 'Rotate key' : 'Revoke key'}
+        busy={rotateMutation.isPending || revokeMutation.isPending}
+        onCancel={() => setPending(null)}
+        onConfirm={() => {
+          if (!pending) return;
+          if (pending.kind === 'rotate') rotateMutation.mutate(pending.key._id);
+          else revokeMutation.mutate(pending.key._id);
+        }}
+      />
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -233,16 +258,18 @@ export function APIKeySettings() {
                   {key.isActive && (
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => rotateMutation.mutate(key._id)}
+                        onClick={() => setPending({ kind: 'rotate', key })}
                         disabled={rotateMutation.isPending}
+                        data-testid={`api-key-rotate-${key._id}`}
                         className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors"
                         title="Rotate key"
                       >
                         <RefreshCw className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => revokeMutation.mutate(key._id)}
+                        onClick={() => setPending({ kind: 'revoke', key })}
                         disabled={revokeMutation.isPending}
+                        data-testid={`api-key-revoke-${key._id}`}
                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                         title="Revoke key"
                       >

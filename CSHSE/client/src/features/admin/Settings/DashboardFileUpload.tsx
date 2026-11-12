@@ -10,6 +10,7 @@ import {
   Trash2,
   Download,
 } from 'lucide-react';
+import { ConfirmDialog } from '../../../components/ConfirmDialog';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -70,8 +71,11 @@ export function DashboardFileUpload() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-files'] });
+      setToDelete(null);
     },
   });
+  // Deleting removes the file from every dashboard immediately — confirm first.
+  const [toDelete, setToDelete] = useState<DashboardFile | null>(null);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -151,6 +155,16 @@ export function DashboardFileUpload() {
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog
+        open={!!toDelete}
+        testId="dashboard-file-confirm"
+        title={`Delete “${toDelete?.originalName ?? ''}”?`}
+        message="The file is removed from every Program Coordinator and reader dashboard straight away, and can't be restored from here. Upload it again if you need it back."
+        confirmLabel="Delete file"
+        busy={deleteMutation.isPending}
+        onCancel={() => setToDelete(null)}
+        onConfirm={() => toDelete && deleteMutation.mutate(toDelete._id)}
+      />
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex items-center gap-3">
@@ -294,8 +308,9 @@ export function DashboardFileUpload() {
                           <Download className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => deleteMutation.mutate(file._id)}
+                          onClick={() => setToDelete(file)}
                           disabled={deleteMutation.isPending}
+                          data-testid={`dashboard-file-delete-${file._id}`}
                           className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
                           title="Delete"
                         >

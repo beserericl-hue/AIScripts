@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useHelpScreen } from '../../../lib/helpScreens';
 import {
   Settings,
@@ -127,7 +128,10 @@ export function SettingsPage() {
   }, [isActuallySuperuser, effectiveRole, isImpersonatingAdmin]);
 
   // Set default active section based on available items
-  const defaultSection = navItems[0]?.id || 'webhook';
+  // ?section=<id> opens a specific section (e.g. from the admin dashboard).
+  const [searchParams] = useSearchParams();
+  const requested = searchParams.get('section') as SettingsSection | null;
+  const defaultSection = (requested && navItems.find((i) => i.id === requested)?.id) || navItems[0]?.id || 'webhook';
   const [activeSection, setActiveSection] = useState<SettingsSection>(defaultSection);
   // Help "?" — each settings section has its own video (settings-<section>).
   useHelpScreen(`settings-${activeSection}`);
@@ -164,12 +168,8 @@ export function SettingsPage() {
     }
   };
 
-  const getHeaderDescription = () => {
-    if (isActuallySuperuser) {
-      return 'Configure webhook integration and API keys';
-    }
-    return 'Manage users, institutions, and spec documents';
-  };
+  // Header follows the section on screen; superuser-only sections say so.
+  const activeItem = navItems.find((i) => i.id === activeSection);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -179,11 +179,16 @@ export function SettingsPage() {
           <div className="flex items-center gap-3">
             <Settings className="w-8 h-8 text-primary" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {isActuallySuperuser ? 'Superuser Settings' : 'Admin Settings'}
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2" data-testid="settings-title">
+                Settings{activeItem ? ` · ${activeItem.label}` : ''}
+                {activeItem?.access === 'superuser' && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800" data-testid="settings-superuser-badge">
+                    Superuser only
+                  </span>
+                )}
               </h1>
-              <p className="text-sm text-gray-500">
-                {getHeaderDescription()}
+              <p className="text-sm text-gray-500" data-testid="settings-subtitle">
+                {activeItem?.description || 'Manage the portal'}
               </p>
             </div>
           </div>

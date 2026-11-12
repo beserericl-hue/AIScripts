@@ -643,7 +643,8 @@ export const escalateComment = async (req: AuthenticatedRequest, res: Response) 
 /**
  * Julia / admin / lead_reader inbox of comments awaiting relay decisions
  * for one submission. Returns the un-relayed reader/lead-reader comments
- * (and any board-escalated comments) the board needs to triage.
+ * (and any board-escalated ones) the board needs to triage — never the
+ * program coordinator's own notes.
  */
 export const getRelayQueue = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -652,8 +653,12 @@ export const getRelayQueue = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(403).json({ error: 'Only lead readers, admin, or the board can view the relay queue' });
     }
     const { submissionId } = req.params;
+    // Readers' / lead readers' comments only: the coordinator's own submit-time
+    // "Needs Improvement" notes are stored as comments too (authorRole
+    // program_coordinator) and must never be offered for relay back to them.
     const comments = await Comment.find({
       submissionId,
+      authorRole: { $in: ['reader', 'lead_reader'] },
       $or: [{ relayed: false }, { boardEscalated: true }],
     })
       .sort({ createdAt: 1 })

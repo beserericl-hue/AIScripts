@@ -235,3 +235,56 @@ describe('CR-010 — list filters by participant for non-elevated', () => {
     expect(adminSubjects).toEqual(['A', 'B']);
   });
 });
+
+describe('Messages — New message recipients + multi-role reviewers', () => {
+  it('POSITIVE: recipients are the other members of the review team (lead + readers)', async () => {
+    const { sid, leadTok, leadId, r1Id } = await seed();
+    const sub: any = await Submission.findById(sid);
+    const { user: r3 } = await createUser({ role: 'reader', firstName: 'Reader', lastName: 'Charlie' });
+    await assignToSubmission(sub, { _id: r1Id, firstName: 'Reader', lastName: 'Alpha' } as any, 'reader');
+    await assignToSubmission(sub, r3, 'reader');
+    const res = await request(app).get(`/api/submissions/${sid}/messages/recipients`).set('Authorization', `Bearer ${leadTok}`);
+    expect(res.status).toBe(200);
+    const names = res.body.recipients.map((r: any) => r.name).sort();
+    expect(names).toEqual(['Reader Alpha', 'Reader Charlie']);
+    expect(res.body.recipients.some((r: any) => r._id === leadId)).toBe(false); // never yourself
+    expect(res.body.recipients.every((r: any) => r.role === 'reader')).toBe(true);
+  });
+
+  it('POSITIVE: a reader sees the lead as a recipient, labelled lead_reader', async () => {
+    const { sid, leadId, r1Id } = await seed();
+    const sub: any = await Submission.findById(sid);
+    const r1 = { _id: r1Id, firstName: 'Reader', lastName: 'Alpha' } as any;
+    await assignToSubmission(sub, r1, 'reader');
+    const res = await request(app).get(`/api/submissions/${sid}/messages/recipients`).set('Authorization', `Bearer ${signTokenFor({ _id: r1Id, role: 'reader' } as any)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.recipients).toEqual([expect.objectContaining({ _id: leadId, role: 'lead_reader', name: 'Lead Linda' })]);
+  });
+
+  it('NEGATIVE: the program coordinator gets 403; an unassigned reader gets 403', async () => {
+    const { sid, pcTok, r2Tok } = await seed();
+    expect((await request(app).get(`/api/submissions/${sid}/messages/recipients`).set('Authorization', `Bearer ${pcTok}`)).status).toBe(403);
+    expect((await request(app).get(`/api/submissions/${sid}/messages/recipients`).set('Authorization', `Bearer ${r2Tok}`)).status).toBe(403);
+  });
+
+  it('POSITIVE: an assigned reader whose main role is coordinator elsewhere can be messaged', async () => {
+    const { sid, leadTok } = await seed();
+    const sub: any = await Submission.findById(sid);
+    const { user: multi } = await createUser({ role: 'program_coordinator', firstName: 'Nicole', lastName: 'Kras' });
+    await assignToSubmission(sub, multi, 'reader');
+    const res = await request(app)
+      .post(`/api/submissions/${sid}/messages`)
+      .set('Authorization', `Bearer ${leadTok}`)
+      .send({ subject: 'Your 4.a notes', participantIds: [String(multi._id)], message: 'Hi Nicole' });
+    expect(res.status).toBe(201);
+  });
+
+  it('NEGATIVE: this school\'s coordinator still cannot be added to a thread', async () => {
+    const { sid, leadTok, pcId } = await seed();
+    const res = await request(app)
+      .post(`/api/submissions/${sid}/messages`)
+      .set('Authorization', `Bearer ${leadTok}`)
+      .send({ subject: 'x', participantIds: [pcId], message: 'y' });
+    expect(res.status).toBe(400);
+  });
+});

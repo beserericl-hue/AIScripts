@@ -231,6 +231,25 @@ describe('CR-023 — relay/unrelay/escalate transitions', () => {
       .set('Authorization', `Bearer ${signTokenFor(pc as any)}`);
     expect(pcRes.status).toBe(403);
   });
+
+  it('NEGATIVE: the coordinator\'s own Needs Improvement notes are never in the relay queue', async () => {
+    const { user: lead } = await createUser({ role: 'lead_reader' });
+    const { user: pc } = await createUser({ role: 'program_coordinator' });
+    const { user: reader } = await createUser({ role: 'reader' });
+    const sub = await seedSubmission(pc._id as any);
+    await assignToSubmission(sub, lead, 'lead_reader');
+    await seedComment(sub._id, reader._id, 'Reader A'); // POSITIVE: reader comment awaiting relay
+    await seedComment(sub._id, lead._id, 'Lead L', { authorRole: 'lead_reader' }); // POSITIVE: lead comment
+    await seedComment(sub._id, pc._id, 'Nicole PC', { authorRole: 'program_coordinator', content: 'Needs Improvement: we will add the 2026 minutes.' });
+    await seedComment(sub._id, pc._id, 'Nicole PC', { authorRole: 'program_coordinator', boardEscalated: true });
+    const res = await request(app)
+      .get(`/api/submissions/${sub._id}/comments/relay-queue`)
+      .set('Authorization', `Bearer ${signTokenFor(lead as any)}`);
+    expect(res.status).toBe(200);
+    const roles = res.body.comments.map((c: any) => c.authorRole).sort();
+    expect(roles).toEqual(['lead_reader', 'reader']);
+    expect(res.body.comments.some((c: any) => String(c.authorId) === String(pc._id))).toBe(false);
+  });
 });
 
 describe('Comment counter — toolbar "Comments N" matches the panel', () => {

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
+import { institutionSelfStudyPath } from './institutionSelfStudyPath';
 import {
   LayoutDashboard,
   Bell,
@@ -432,6 +433,11 @@ export function Dashboard() {
       upcomingSiteVisits,
     };
   }, [filteredInstitutions, filteredChangeRequests, siteVisits]);
+
+  // Deadlines table "eye": open the institution's most recent self-study.
+  const openInstitutionSelfStudy = async (institutionId: string) => {
+    navigate(await institutionSelfStudyPath(institutionId));
+  };
 
   const leadReaders = users.filter((u) => u.role === 'lead_reader');
   const readers = users.filter((u) => u.role === 'reader');
@@ -1144,7 +1150,7 @@ export function Dashboard() {
             </div>
 
             {/* Institutions with Upcoming Deadlines */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2 min-w-0" data-testid="deadlines-card">
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <div className="flex items-center gap-2">
                   <Clock className="w-5 h-5 text-red-500" />
@@ -1154,25 +1160,25 @@ export function Dashboard() {
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full table-auto" data-testid="deadlines-table">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Institution
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Type
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Deadline
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Lead Reader
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Readers
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Actions
                       </th>
                     </tr>
@@ -1196,17 +1202,17 @@ export function Dashboard() {
 
                         return (
                           <tr key={inst._id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-4 py-4 max-w-xs whitespace-normal">
                               <p className="font-medium text-gray-900">
                                 {inst.name}
                               </p>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-4 py-4 whitespace-nowrap">
                               <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
                                 {inst.type.replace('_', ' ')}
                               </span>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-4 py-4 whitespace-nowrap">
                               <div className="flex items-center gap-2">
                                 <span
                                   className={`font-medium ${
@@ -1229,7 +1235,7 @@ export function Dashboard() {
                                   : 'Past due'}
                               </p>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-4 py-4 whitespace-nowrap">
                               {inst.assignedLeadReaderId ? (
                                 <span className="text-sm text-gray-900">
                                   {inst.assignedLeadReaderId.firstName}{' '}
@@ -1241,7 +1247,7 @@ export function Dashboard() {
                                 </span>
                               )}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-4 py-4 min-w-[10rem] max-w-xs whitespace-normal break-words">
                               {inst.assignedReaderIds &&
                               inst.assignedReaderIds.length > 0 ? (
                                 <span className="text-sm text-gray-900">
@@ -1255,8 +1261,15 @@ export function Dashboard() {
                                 </span>
                               )}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <button className="text-primary-600 hover:text-primary-700">
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <button
+                                type="button"
+                                data-testid={`deadline-open-${inst._id}`}
+                                title={`Open ${inst.name}'s self-study`}
+                                aria-label={`Open ${inst.name}'s self-study`}
+                                onClick={() => openInstitutionSelfStudy(inst._id)}
+                                className="text-primary-600 hover:text-primary-700"
+                              >
                                 <Eye className="w-4 h-4" />
                               </button>
                             </td>

@@ -92,6 +92,20 @@ describe('RelayConsoleView', () => {
     expect(screen.getByText('Escalated')).toBeInTheDocument();
   });
 
+  it('never shows the coordinator\'s own notes, even if the server sends them', () => {
+    const pcNote = { ...sample[0], _id: 'pc1', authorName: 'Nicole Williams', authorRole: 'program_coordinator' as const, content: 'Needs Improvement: we will add minutes.' };
+    render(<RelayConsoleView {...baseHandlers} comments={[...sample, pcNote] as any} isLoading={false} draftsByComment={{}} />);
+    expect(screen.queryByTestId('relay-card-pc1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('relay-card-c1')).toBeInTheDocument();
+    expect(screen.getByText('3 comments')).toBeInTheDocument();
+  });
+
+  it('shows the empty state when only coordinator notes remain', () => {
+    const pcNote = { ...sample[0], _id: 'pc1', authorRole: 'program_coordinator' as const };
+    render(<RelayConsoleView {...baseHandlers} comments={[pcNote] as any} isLoading={false} draftsByComment={{}} />);
+    expect(screen.getByTestId('relay-console-empty')).toBeInTheDocument();
+  });
+
   it('CR-052 / S12.3 — the queue header carries the hint anchor id', () => {
     const { container } = render(
       <RelayConsoleView
