@@ -188,8 +188,23 @@ export const receiveHelpUploadCallback = async (req: Request, res: Response) => 
 /**
  * Get all help documents (DB-backed list replacing localStorage)
  */
+/** n8n normally reports back within a minute; after this, the upload is treated as failed. */
+export const HELP_UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
+export const HELP_UPLOAD_TIMEOUT_ERROR =
+  'The help knowledge base did not confirm this document within 15 minutes, so it may not have been added. Try uploading it again; if it keeps happening, the n8n "CSHSE Help - Document Upload" workflow needs attention.';
+
+/** Mark uploads that never got their n8n callback as failed (so they don't sit at "processing" forever). */
+export async function expireStuckHelpUploads(now: Date = new Date()): Promise<number> {
+  const r = await HelpDocument.updateMany(
+    { status: 'processing', uploadedAt: { $lt: new Date(now.getTime() - HELP_UPLOAD_TIMEOUT_MS) } },
+    { $set: { status: 'error', error: HELP_UPLOAD_TIMEOUT_ERROR } }
+  );
+  return r.modifiedCount || 0;
+}
+
 export const getHelpDocuments = async (_req: Request, res: Response) => {
   try {
+    await expireStuckHelpUploads();
     const docs = await HelpDocument.find().select('-callbackToken').sort({ uploadedAt: -1 });
     console.log(`[HelpDocuments] Returning ${docs.length} documents`);
     return res.json(docs);

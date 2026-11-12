@@ -142,7 +142,7 @@ export function HelpDocumentUpload() {
         open={!!toDelete}
         testId="help-doc-confirm"
         title={`Remove “${toDelete?.title || toDelete?.fileName || ''}”?`}
-        message="The document is removed from the AI help chat's knowledge base straight away; the chat will no longer answer from it. Upload it again to restore it."
+        message="This removes the document from this list. Its text stays in the AI help chat's knowledge base (shared by the live and test portals) until it is removed there, so the chat may still answer from it."
         confirmLabel="Remove document"
         busy={deleteMutation.isPending}
         onCancel={() => setToDelete(null)}
