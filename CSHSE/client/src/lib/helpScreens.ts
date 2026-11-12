@@ -32,7 +32,7 @@ export const HELP_SCREEN_TITLES: Record<string, string> = {
   'editor-lead-reader-report': 'Lead Reader Report',
   'reader-dashboard': 'Reader dashboard',
   'reader-queue': 'Review queue',
-  'reader-review': 'Reviewing a self-study',
+  'reader-review': 'Reviewing and commenting',
   'reader-self-study': 'Reading the self-study',
   'reader-report': 'Reader Report',
   'reader-report-lead': 'Reader Report (lead reader)',
@@ -59,6 +59,29 @@ export const HELP_SCREEN_TITLES: Record<string, string> = {
   'settings-api-keys': 'Settings: API Keys',
   'settings-data-management': 'Settings: Data Management',
   'parser-train': 'Parser Train',
+};
+
+/**
+ * Further videos offered under a screen's own video ("More videos for this
+ * screen") — for things that happen on that screen but have their own video.
+ */
+export const HELP_RELATED: Record<string, string[]> = {
+  'reader-self-study': ['reader-review', 'reader-report'],
+  'reader-report': ['reader-self-study', 'reader-review'],
+  'reader-report-lead': ['reader-review', 'lead-compilation'],
+  'reader-dashboard': ['reader-self-study', 'reader-report'],
+  'lead-dashboard': ['reader-report-lead', 'lead-compilations'],
+  'lead-compilation': ['editor-lead-reader-report', 'site-visit-checklist', 'site-visit-itinerary'],
+  'editor-lead-reader-report': ['lead-compilation'],
+  'pc-dashboard': ['editor-import', 'editor-review', 'editor-standards', 'editor-submit'],
+  'self-study-home': ['editor-import', 'pc-dashboard'],
+  'editor-import': ['editor-review', 'editor-import-file'],
+  'editor-review': ['editor-standards', 'editor-files'],
+  'editor-files': ['editor-import-file'],
+  'editor-standards': ['editor-introduction', 'editor-submit'],
+  'editor-introduction': ['editor-standards'],
+  'board-dashboard': ['board-report'],
+  'admin-dashboard': ['settings-users', 'admin-board-console'],
 };
 
 /** Route (+ role) → screen id. Multi-view pages override via useHelpScreen. */
