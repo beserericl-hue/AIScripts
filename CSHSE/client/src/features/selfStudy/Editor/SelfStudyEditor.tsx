@@ -2126,8 +2126,15 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   }, []);
 
   // Help "?" — open the video for whatever this editor is showing right now.
+  // Readers, lead readers and admins open the same editor read-only: they get
+  // the reading video, not the coordinator's editing ones (Lead Reader Report
+  // view excepted — that is the lead's own screen).
   useHelpScreen(
-    finalSubmitOpen
+    !isProgramCoordinator
+      ? activeView === 'lead-reader-report'
+        ? 'editor-lead-reader-report'
+        : 'reader-self-study'
+      : finalSubmitOpen
       ? 'editor-submit'
       : showImportFile
         ? 'editor-import-file'
