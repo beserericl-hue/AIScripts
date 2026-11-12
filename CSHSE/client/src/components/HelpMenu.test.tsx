@@ -14,6 +14,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/msw-server';
 import { HelpMenu } from './HelpMenu';
@@ -40,13 +41,13 @@ function setUser(prefs: any) {
 
 function renderHelpMenu(initialPath = '/dashboard') {
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[initialPath]}>
       <TourProvider>
         <HintProvider>
           <HelpMenu />
         </HintProvider>
       </TourProvider>
-    </MemoryRouter>
+    </MemoryRouter></QueryClientProvider>
   );
 }
 
@@ -66,13 +67,47 @@ describe('CR-052 — HelpMenu', () => {
     );
   });
 
-  it('shows the trigger and opens / closes the dropdown', () => {
+  it('shows the trigger and opens / closes the help window', () => {
     renderHelpMenu();
     const trigger = screen.getByTestId('help-menu-trigger');
     expect(trigger).toBeInTheDocument();
-    expect(screen.queryByTestId('help-menu-dropdown')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('help-video-modal')).not.toBeInTheDocument();
     fireEvent.click(trigger);
-    expect(screen.getByTestId('help-menu-dropdown')).toBeInTheDocument();
+    expect(screen.getByTestId('help-video-modal')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('help-video-close'));
+    expect(screen.queryByTestId('help-video-modal')).not.toBeInTheDocument();
+  });
+
+  it('plays the video for the screen on view, with the PDF download', async () => {
+    server.use(
+      http.get(/\/api\/help-videos\/pc-dashboard\/links$/, () =>
+        HttpResponse.json({
+          screenId: 'pc-dashboard',
+          title: 'Program Coordinator dashboard',
+          durationSec: 125,
+          videoUrl: '/help-video-file/v.tok',
+          pdfUrl: '/help-video-file/p.tok',
+        })
+      )
+    );
+    renderHelpMenu('/dashboard');
+    expect(screen.getByTestId('help-menu-trigger')).toHaveAttribute('data-help-screen', 'pc-dashboard');
+    fireEvent.click(screen.getByTestId('help-menu-trigger'));
+    const player = await screen.findByTestId('help-video-player');
+    expect(player).toHaveAttribute('src', '/help-video-file/v.tok');
+    expect(screen.getByTestId('help-video-pdf')).toHaveAttribute('href', '/help-video-file/p.tok?download=1');
+    expect(screen.getByText('Video · 2:05')).toBeInTheDocument();
+  });
+
+  it('says a video is coming when the screen has none yet', async () => {
+    server.use(
+      http.get(/\/api\/help-videos\/[^/]+\/links$/, () => HttpResponse.json({ error: 'none' }, { status: 404 }))
+    );
+    renderHelpMenu('/messages/abc123');
+    fireEvent.click(screen.getByTestId('help-menu-trigger'));
+    expect(await screen.findByTestId('help-video-missing')).toHaveTextContent('coming soon');
+    expect(screen.queryByTestId('help-video-pdf')).not.toBeInTheDocument();
+    expect(screen.getByTestId('help-menu-chat')).toBeInTheDocument();
   });
 
   it('shows a per-screen Tour item on a screen that owns a tour', () => {
@@ -122,14 +157,14 @@ describe('CR-052 — HelpMenu', () => {
       return null;
     }
     render(
-      <MemoryRouter initialEntries={['/dashboard']}>
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/dashboard']}>
         <TourProvider>
           <HintProvider>
             <Probe />
             <HelpMenu />
           </HintProvider>
         </TourProvider>
-      </MemoryRouter>
+      </MemoryRouter></QueryClientProvider>
     );
     fireEvent.click(screen.getByTestId('help-menu-trigger'));
     fireEvent.click(screen.getByTestId('help-menu-tour'));
@@ -146,14 +181,14 @@ describe('CR-052 — HelpMenu', () => {
       return null;
     }
     render(
-      <MemoryRouter initialEntries={['/self-study']}>
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/self-study']}>
         <TourProvider>
           <HintProvider>
             <Probe />
             <HelpMenu />
           </HintProvider>
         </TourProvider>
-      </MemoryRouter>
+      </MemoryRouter></QueryClientProvider>
     );
     fireEvent.click(screen.getByTestId('help-menu-trigger'));
     fireEvent.click(screen.getByTestId('help-menu-tour'));
@@ -173,21 +208,21 @@ describe('CR-052 — HelpMenu', () => {
     expect(useHelpChatStore.getState().isOpen).toBe(true);
   });
 
-  it('opening the dropdown dismisses the post-tour hint', () => {
+  it('opening the help window dismisses the post-tour hint', () => {
     let hintApi: ReturnType<typeof useHint> | null = null;
     function Probe() {
       hintApi = useHint();
       return null;
     }
     render(
-      <MemoryRouter initialEntries={['/dashboard']}>
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/dashboard']}>
         <TourProvider>
           <HintProvider>
             <Probe />
             <HelpMenu />
           </HintProvider>
         </TourProvider>
-      </MemoryRouter>
+      </MemoryRouter></QueryClientProvider>
     );
     act(() => {
       hintApi!.showHint({

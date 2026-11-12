@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useHelpScreen } from '../../../lib/helpScreens';
 import {
   Settings,
   Webhook,
@@ -128,6 +129,8 @@ export function SettingsPage() {
   // Set default active section based on available items
   const defaultSection = navItems[0]?.id || 'webhook';
   const [activeSection, setActiveSection] = useState<SettingsSection>(defaultSection);
+  // Help "?" — each settings section has its own video (settings-<section>).
+  useHelpScreen(`settings-${activeSection}`);
 
   // If active section is not in the available items, switch to the first available
   React.useEffect(() => {
