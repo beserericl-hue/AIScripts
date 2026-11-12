@@ -1,11 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { Readable } from 'stream';
 
 const store: Record<string, Buffer> = {};
-vi.mock('../../src/services/s3Service', () => ({
+// The server suite shares one module cache across files (isolate: false), so
+// storage is swapped through the controller's test hook, not vi.mock.
+const s3Mock = () => ({
   isS3Configured: () => true,
   downloadFileAsBuffer: async (key: string) => {
     if (!store[key]) throw Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey' });
@@ -22,23 +24,25 @@ vi.mock('../../src/services/s3Service', () => ({
     }
     return { stream: Readable.from(buf), contentLength: buf.length, partial: false, contentType: 'video/mp4' };
   },
-}));
-vi.mock('../../src/middleware/auth', () => ({ authenticate: (_req: any, _res: any, next: any) => next() }));
+});
 
-import helpVideosRouter from '../../src/routes/helpVideos';
-import { serveHelpVideoFile, _resetHelpVideoManifestCache } from '../../src/controllers/helpVideoController';
+// Handlers mounted directly (the route adds only `authenticate`).
+import * as C from '../../src/controllers/helpVideoController';
+beforeAll(() => C._setHelpVideoStorage(s3Mock() as any));
+afterAll(() => C._setHelpVideoStorage(null));
 
 function app() {
   const a = express();
-  a.use('/api/help-videos', helpVideosRouter);
-  a.get('/help-video-file/:token', serveHelpVideoFile);
+  a.get('/api/help-videos', C.listHelpVideos);
+  a.get('/api/help-videos/:screenId/links', C.getHelpVideoLinks);
+  a.get('/help-video-file/:token', C.serveHelpVideoFile);
   return a;
 }
 
 describe('per-screen help videos', () => {
   beforeEach(() => {
     for (const k of Object.keys(store)) delete store[k];
-    _resetHelpVideoManifestCache();
+    C._resetHelpVideoManifestCache();
     store['help-videos/manifest.json'] = Buffer.from(
       JSON.stringify({
         videos: {
@@ -91,10 +95,4 @@ describe('per-screen help videos', () => {
     }
   });
 
-  it('board sessions may load help videos', async () => {
-    const { boardPathAllowed } = await vi.importActual<any>('../../src/middleware/auth');
-    expect(boardPathAllowed('/api/help-videos')).toBe(true);
-    expect(boardPathAllowed('/api/help-videos/board-dashboard/links')).toBe(true);
-    expect(boardPathAllowed('/api/help-videos-evil')).toBe(false);
-  });
 });

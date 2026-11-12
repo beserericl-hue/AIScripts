@@ -94,6 +94,13 @@ describe('Board role — completed Lead Reader Reports (positive)', () => {
     expect(row.completedAt).toBeTruthy();
   });
 
+  it('board can load the per-screen help videos (the "?" button)', async () => {
+    const { token } = await boardUser();
+    const res = await request(app).get('/api/help-videos').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('videos');
+  });
+
   it('board opens a completed LRR read-only and downloads DOCX + PDF', async () => {
     const s = await seed();
     const { token } = await boardUser();
