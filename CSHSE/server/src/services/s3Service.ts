@@ -131,6 +131,36 @@ export async function downloadFile(
 }
 
 /**
+ * Ranged GetObject — for streaming media (the browser's <video> seeks with
+ * `Range: bytes=…`). Passes the client's Range header straight to S3 and
+ * reports back what S3 served so the caller can answer 206 or 200.
+ */
+export async function downloadFileRange(
+  key: string,
+  range?: string
+): Promise<{
+  stream: Readable;
+  contentType?: string;
+  contentLength?: number;
+  contentRange?: string;
+  partial: boolean;
+}> {
+  const client = getS3Client();
+  const bucket = getBucketName();
+  const response = await client.send(
+    new GetObjectCommand({ Bucket: bucket, Key: key, ...(range ? { Range: range } : {}) })
+  );
+  if (!response.Body) throw new Error(`S3 returned empty body for key: ${key}`);
+  return {
+    stream: response.Body as Readable,
+    contentType: response.ContentType,
+    contentLength: response.ContentLength,
+    contentRange: response.ContentRange,
+    partial: !!response.ContentRange,
+  };
+}
+
+/**
  * Delete a file from S3 (DeleteObject).
  */
 export async function deleteFile(key: string): Promise<void> {

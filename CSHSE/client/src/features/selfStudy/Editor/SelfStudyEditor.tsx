@@ -51,6 +51,7 @@ import { Wizard as AIImportWizard } from './AIImport';
 import { useAIImportStore } from '../../../store/aiImportStore';
 import { useAuthStore } from '../../../store/authStore';
 import { PhaseIndicator } from './PhaseIndicator';
+import { useHelpScreen } from '../../../lib/helpScreens';
 
 // Use consistent API paths without relying on environment variable
 
@@ -2135,6 +2136,22 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const handleSubmitSelfStudy = useCallback(() => {
     setFinalSubmitOpen(true);
   }, []);
+
+  // Help "?" — open the video for whatever this editor is showing right now.
+  useHelpScreen(
+    finalSubmitOpen
+      ? 'editor-submit'
+      : showImportFile
+        ? 'editor-import-file'
+        : ({
+            'ai-import': 'editor-import',
+            'review-surface': 'editor-review',
+            introduction: 'editor-introduction',
+            standards: 'editor-standards',
+            files: 'editor-files',
+            'lead-reader-report': 'editor-lead-reader-report',
+          } as const)[activeView]
+  );
 
   // CR-008 / S2A.2 — pre-submission preflight. Fetched only while the
   // modal is open so we don't poll the server on every dashboard render,

@@ -1,6 +1,9 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { HelpCircle, MessageCircle, Sparkles } from 'lucide-react';
+import { HelpCircle } from 'lucide-react';
+import { HelpVideoModal } from './HelpVideoModal';
+import { resolveHelpScreen, useHelpScreenStore } from '../lib/helpScreens';
+import { useAuthStore } from '../store/authStore';
 import { t } from '../i18n/strings';
 import { useTour } from '../features/tour/TourProvider';
 import { useHint } from '../features/tour/HintProvider';
@@ -12,19 +15,23 @@ import { useHelpChatAvailable } from './HelpChat';
 // ---------------------------------------------------------------------------
 // CR-052 / Sprint 7 (+ per-screen follow-on) — HelpMenu.
 //
-// Dropdown trigger living next to the Layout's user menu. Two items:
-//   1. "Chat with us"       — opens the existing HelpChat widget via store.
-//   2. "(Re)start the tour" — shown whenever the CURRENT route owns a tour
+// The "?" in the top-right corner. Clicking it opens the help window for the
+// screen on view (HelpVideoModal): that screen's narrated video + a PDF of the
+// narration with screenshots, plus the two older entry points:
+//   - "Chat with us"       — opens the existing HelpChat widget via store.
+//   - "(Re)start the tour" — shown whenever the CURRENT route owns a tour
 //                             (welcome on /dashboard, the screen's own tour
 //                             elsewhere); label + replay flip on whether the
 //                             viewer has already completed THAT tour.
+// The screen id comes from the route + role (resolveHelpScreen), refined by
+// multi-view pages through useHelpScreen().
 //
 // The trigger element carries `id={TOUR_TARGET_IDS.help}` + the
 // `data-tour-step="help"` attribute so the welcome tour can spotlight
 // it as its final step, AND the hint balloon can anchor to it after the
 // tour finishes.
 //
-// Opening the dropdown dismisses any anchored hint (so the user isn't
+// Opening the help window dismisses any anchored hint (so the user isn't
 // nagged twice).
 // ---------------------------------------------------------------------------
 
@@ -44,18 +51,10 @@ export function HelpMenu({ className }: HelpMenuProps): JSX.Element {
   const { dismissHint } = useHint();
   const openHelpChat = useHelpChatStore((s) => s.open);
   const chatAvailable = useHelpChatAvailable();
-
-  // Close on outside click — mirrors the cog dropdown pattern in
-  // Layout.tsx:66-73.
-  React.useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
-  }, []);
+  const role = useAuthStore((s) => s.getEffectiveRole());
+  const override = useHelpScreenStore((s) => s.override);
+  // The video for the screen on view: a multi-view page's own view wins.
+  const screenId = override || resolveHelpScreen(location.pathname, role);
 
   // Opening the menu dismisses any anchored post-tour hint.
   const handleToggle = () => {
@@ -95,8 +94,9 @@ export function HelpMenu({ className }: HelpMenuProps): JSX.Element {
         id={TOUR_TARGET_IDS.help}
         data-tour-step="help"
         data-testid="help-menu-trigger"
+        data-help-screen={screenId ?? ''}
         onClick={handleToggle}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={t('help.trigger.label')}
         title={t('help.trigger.label')}
@@ -104,41 +104,18 @@ export function HelpMenu({ className }: HelpMenuProps): JSX.Element {
       >
         <HelpCircle className="h-4 w-4" aria-hidden />
       </button>
-      {open && (
-        <div
-          data-testid="help-menu-dropdown"
-          role="menu"
-          className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
-        >
-          <button
-            type="button"
-            role="menuitem"
-            data-testid="help-menu-chat"
-            disabled={!chatAvailable}
-            title={
-              chatAvailable ? undefined : t('help.menu.chatUnavailable')
-            }
-            onClick={onChat}
-            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <MessageCircle className="h-4 w-4" aria-hidden />
-            <span>{t('help.menu.chat')}</span>
-          </button>
-
-          {routeTour && (
-            <button
-              type="button"
-              role="menuitem"
-              data-testid="help-menu-tour"
-              onClick={onTour}
-              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            >
-              <Sparkles className="h-4 w-4" aria-hidden />
-              <span>{tourLabel}</span>
-            </button>
-          )}
-        </div>
-      )}
+      <HelpVideoModal
+        open={open}
+        screenId={screenId}
+        onClose={() => setOpen(false)}
+        chat={{
+          available: chatAvailable,
+          unavailableHint: t('help.menu.chatUnavailable'),
+          label: t('help.menu.chat'),
+          onClick: onChat,
+        }}
+        tour={routeTour ? { label: tourLabel, onClick: onTour } : null}
+      />
     </div>
   );
 }

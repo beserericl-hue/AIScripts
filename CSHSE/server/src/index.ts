@@ -57,6 +57,7 @@ import evidenceRecommendationsRouter from './routes/evidenceRecommendations';
 import itineraryRouter from './routes/itinerary';
 // CR-053 / Sprint 7.1 — Board decisions + cycle scheduler.
 import boardDecisionsRouter from './routes/boardDecisions';
+import helpVideosRouter from './routes/helpVideos';
 import boardReportsRouter from './routes/boardReports';
 // CR-016 / Sprint 7.2 — In-app bug reporter.
 import bugReportsRouter from './routes/bugReports';
@@ -160,6 +161,9 @@ app.get('/ready', (_req, res) => {
 // Mounted BEFORE the authenticated /api routers (it must NOT require a session).
 import { servePublicFile } from './controllers/publicFileController';
 app.get('/public-file/:token', servePublicFile);
+// Per-screen help videos: token-gated, Range-aware streaming (links minted by /api/help-videos).
+import { serveHelpVideoFile } from './controllers/helpVideoController';
+app.get('/help-video-file/:token', serveHelpVideoFile);
 
 // API Routes
 // Auth routes MUST be first - they're public and other /api routers have authenticate middleware
@@ -212,6 +216,7 @@ app.use('/api', checklistRouter);
 app.use('/api', evidenceRecommendationsRouter);
 app.use('/api', itineraryRouter);
 app.use('/api/board', boardReportsRouter);
+app.use('/api/help-videos', helpVideosRouter);
 app.use('/api', boardDecisionsRouter);
 app.use('/api', bugReportsRouter);
 app.use('/api', auditTrailRouter);
