@@ -24,7 +24,7 @@ import {
   Download,
   FolderOpen,
 } from 'lucide-react';
-import { format, formatDistanceToNow, isWithinInterval, addDays } from 'date-fns';
+import { format, formatDistanceToNow, isWithinInterval, addDays, startOfDay } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { JointVentureBadge } from '../../components/JointVentureBadge';
@@ -119,6 +119,8 @@ interface DashboardFilters {
   readerId: string;
   search: string;
 }
+
+const VISITS_SHOWN = 5;
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -407,6 +409,9 @@ export function Dashboard() {
   // workflow-summary endpoint (server-side rollup); the old client-side
   // pcStats useMemo was removed with the stat-card rewrite.
 
+  // Upcoming Site Visits card: first few, with a View all toggle.
+  const [showAllVisits, setShowAllVisits] = useState(false);
+
   // Calculate statistics for Admin/other roles
   const stats = useMemo(() => {
     const upcomingDeadlines = filteredInstitutions.filter((inst) => {
@@ -420,8 +425,9 @@ export function Dashboard() {
 
     const upcomingSiteVisits = siteVisits.filter((sv) => {
       const visitDate = dateOnly(sv.scheduledDate);
+      // A visit later today still counts as upcoming.
       return isWithinInterval(visitDate, {
-        start: new Date(),
+        start: startOfDay(new Date()),
         end: addDays(new Date(), 14),
       });
     }).length;
@@ -1047,7 +1053,7 @@ export function Dashboard() {
                     <p>No upcoming site visits</p>
                   </div>
                 ) : (
-                  siteVisits.map((sv) => (
+                  (showAllVisits ? siteVisits : siteVisits.slice(0, VISITS_SHOWN)).map((sv) => (
                     <div
                       key={sv._id}
                       className="p-4 hover:bg-gray-50 cursor-pointer"
@@ -1098,10 +1104,15 @@ export function Dashboard() {
                   ))
                 )}
               </div>
-              {siteVisits.length > 0 && (
+              {siteVisits.length > VISITS_SHOWN && (
                 <div className="p-4 border-t border-gray-200">
-                  <button className="w-full text-sm text-primary-600 hover:text-primary-700">
-                    View all site visits
+                  <button
+                    type="button"
+                    data-testid="site-visits-toggle"
+                    onClick={() => setShowAllVisits((v) => !v)}
+                    className="w-full text-sm text-primary-600 hover:text-primary-700"
+                  >
+                    {showAllVisits ? 'Show fewer' : `View all site visits (${siteVisits.length})`}
                   </button>
                 </div>
               )}

@@ -192,7 +192,7 @@ describe('CR-010 — DM notification fan-out', () => {
     expect(r2Notifs[0].type).toBe('dm.new_message');
     expect(r2Notifs[0].title).toMatch(/Lead Linda/);
     expect(r2Notifs[0].body).toMatch(/clarify 1\.b/);
-    expect(r2Notifs[0].link).toBe(`/reader/${sid}`);
+    expect(r2Notifs[0].link).toBe(`/messages/${sid}`); // opens the conversation (/reader/:id only redirects)
 
     // sender (lead) gets nothing
     const leadNotifs = await Notification.find({ recipientId: leadId }).lean();

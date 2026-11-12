@@ -113,7 +113,7 @@ function _notifyParticipants(opts: {
     type: 'dm.new_message',
     title: `New message from ${opts.senderName}`,
     body: `${opts.subject}: ${_snippet(opts.content)}`,
-    link: `/reader/${opts.submissionId}`,
+    link: `/messages/${opts.submissionId}`,
     submissionId: opts.submissionId,
     email: true
   });
