@@ -14,6 +14,7 @@
  * we need multi-instance scale-out — UI spec §21.1 covers the Railway
  * proxy verification deferred to sub-sprint 1.a's smoke phase.
  */
+import { dropEmptyIntroItems } from '../services/introItems';
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
@@ -813,7 +814,8 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
   // Introduction rail renders. Without this, only hints arrived and the rail
   // stayed empty.
   if (payload.introductions && typeof payload.introductions === 'object') {
-    (importRecord as any).aiIntroductions = payload.introductions;
+    // Empty drafts (a template Standard heading with no program text) are dropped.
+    (importRecord as any).aiIntroductions = dropEmptyIntroItems(payload.introductions);
     (importRecord as any).markModified('aiIntroductions');
   }
   importRecord.aiCompletedAt = new Date();

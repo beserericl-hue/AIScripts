@@ -12,6 +12,7 @@
  *   POST   /api/submissions/:submissionId/review/apply      — read aiReviewState, push approved items to the editor
 
  */
+import { introItemHasBody } from '../services/introItems';
 import { syncPartApprovalsFromReview } from '../services/specPartApprovals';
 import { splitReviewStateIntoParts, composeSpecNarrativeHtml } from '../services/specPartSplit';
 import { Request, Response } from 'express';
@@ -723,7 +724,8 @@ async function materializeApprovedToEditor(
   const introsState = (state.introductions || {}) as Record<string, { items?: any[] }>;
   let introTouched = false;
   for (const [ik, ib] of Object.entries(introsState)) {
-    const approvedItems = (ib?.items || []).filter((it: any) => approved.has(it.sectionId));
+    // An empty draft (no text) never overwrites the editor's introduction.
+    const approvedItems = (ib?.items || []).filter((it: any) => approved.has(it.sectionId) && introItemHasBody(it));
     if (approvedItems.length === 0) continue;
     const html = approvedItems
       .map((it: any) => it.htmlSnippet || `<p>${escapeHtml(it.snippet || '')}</p>`)
