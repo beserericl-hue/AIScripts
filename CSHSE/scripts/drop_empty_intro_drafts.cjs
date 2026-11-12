@@ -14,14 +14,20 @@ const path = require('path');
 const { MongoClient } = require(path.join(__dirname, '..', 'server', 'node_modules', 'mongodb'));
 const APPLY = process.argv.includes('--apply');
 const BK = (process.argv.find((a) => a.startsWith('--backup=')) || '').slice(9);
+// Mirrors server/src/services/introItems.ts: an item with no visible text, or
+// whose only text is CSHSE's own lead-in prompt ("Describe and provide
+// evidence that the following are adequately addressed in the curriculum:"),
+// is not a program draft.
+const promptOnly = (t) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return !!t && t.length <= 300 && /^(describe|provide|identify|explain|document|demonstrate|list|show|discuss)\b[^.:;?!]*:$/i.test(t); };
+const visibleText = (h) => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
 const hasBody = (it) => {
   if (!it) return false;
-  if (String(it.snippet || '').trim()) return true;
   const h = String(it.htmlSnippet || '');
   if (/<(img|table)\b/i.test(h)) return true;
-  return h.replace(/<[^>]+>|&nbsp;|\s/gi, '').length > 0;
+  const t = String(it.snippet || '').trim() || visibleText(h);
+  return !!t && !promptOnly(t);
 };
-const emptyHtml = (h) => !/<(img|table)\b/i.test(String(h || '')) && String(h || '').replace(/<[^>]+>|&nbsp;|\s/gi, '').length === 0;
+const emptyHtml = (h) => !/<(img|table)\b/i.test(String(h || '')) && (visibleText(h).length === 0 || promptOnly(visibleText(h)));
 (async () => {
   const c = await MongoClient.connect(process.env.MONGO_URI); const db = c.db();
   const subs = await db.collection('submissions').find({}, { projection: { submissionId: 1, institutionName: 1, 'aiReviewState.introductions': 1, 'aiReviewState.approvedIds': 1, standardIntroductions: 1, documentIntroduction: 1 } }).toArray();
