@@ -1,3 +1,4 @@
+import { summaryNames } from './institutionPeople';
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
@@ -506,19 +507,22 @@ export function InstitutionManagement() {
                     </div>
 
                     <div className="mt-3 flex items-center gap-4">
-                      {institution.programCoordinatorId ? (
-                        <span className="flex items-center gap-1 text-sm text-teal-600">
-                          <UserCheck className="w-4 h-4" />
-                          Coordinator: {institution.programCoordinatorId.firstName} {institution.programCoordinatorId.lastName}
-                        </span>
-                      ) : (
-                        <span className="text-sm text-amber-600">No coordinator assigned</span>
-                      )}
+                      {(() => {
+                        const pcs = summaryNames(institution.programCoordinatorId, rosterFor(institution._id, 'program_coordinator'));
+                        return pcs.length ? (
+                          <span className="flex items-center gap-1 text-sm text-teal-600" data-testid={`inst-coordinator-${institution._id}`}>
+                            <UserCheck className="w-4 h-4" />
+                            {pcs.length > 1 ? 'Coordinators' : 'Coordinator'}: {pcs.join(', ')}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-amber-600" data-testid={`inst-coordinator-${institution._id}`}>No coordinator assigned</span>
+                        );
+                      })()}
 
-                      {institution.assignedLeadReaderId ? (
-                        <span className="flex items-center gap-1 text-sm text-blue-600">
+                      {summaryNames(institution.assignedLeadReaderId, rosterFor(institution._id, 'lead_reader')).length ? (
+                        <span className="flex items-center gap-1 text-sm text-blue-600" data-testid={`inst-lead-${institution._id}`}>
                           <Users className="w-4 h-4" />
-                          Lead Reader: {institution.assignedLeadReaderId.firstName} {institution.assignedLeadReaderId.lastName}
+                          Lead Reader: {summaryNames(institution.assignedLeadReaderId, rosterFor(institution._id, 'lead_reader')).join(', ')}
                         </span>
                       ) : (
                         <div className="flex items-center gap-2">

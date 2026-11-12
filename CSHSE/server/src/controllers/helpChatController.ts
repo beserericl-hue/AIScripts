@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { WebhookSettings } from '../models/WebhookSettings';
 import { HelpDocument } from '../models/HelpDocument';
+import { isTextUpload, pdfNameFor, textToPdf } from '../services/textToPdf';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -74,12 +75,23 @@ export const uploadHelpDocument = async (req: AuthenticatedRequest, res: Respons
     // Construct callback URL for n8n to notify on completion
     const callbackUrl = getCallbackUrl(req, '/api/webhooks/help/upload/callback');
 
+    // Markdown / text go to n8n as a PDF: the workflow's text branch times out
+    // on real documents, its PDF branch works (see services/textToPdf.ts).
+    let sendBuffer = file.buffer;
+    let sendName = file.originalname;
+    let sendMime = file.mimetype;
+    if (isTextUpload(file.originalname, file.mimetype)) {
+      sendBuffer = await textToPdf(file.buffer.toString('utf8'), title || file.originalname);
+      sendName = pdfNameFor(file.originalname);
+      sendMime = 'application/pdf';
+    }
+
     // Send as JSON with base64-encoded file data (matches spec loader pattern)
-    const base64Data = file.buffer.toString('base64');
+    const base64Data = sendBuffer.toString('base64');
     const payload = {
       data: base64Data,
-      filename: file.originalname,
-      mimeType: file.mimetype,
+      filename: sendName,
+      mimeType: sendMime,
       source: source || 'handbook',
       title: title || file.originalname,
       docId: helpDoc._id.toString(),

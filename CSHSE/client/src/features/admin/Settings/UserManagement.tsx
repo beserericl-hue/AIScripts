@@ -973,24 +973,27 @@ export function UserManagement() {
                 )}
 
                 {roleDraft.map((a, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
+                  // min-w-0 on the row + institution select: a <select> is otherwise
+                  // as wide as its longest option, pushing the remove button out.
+                  <div key={idx} className="flex min-w-0 items-center gap-2" data-testid={`edit-role-row-${idx}`}>
                     <select
                       value={a.role}
                       onChange={(e) => setRoleDraft((d) => d.map((x, i) => i === idx ? { ...x, role: e.target.value as RoleAssignment['role'] } : x))}
-                      className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                      className="shrink-0 rounded border border-gray-300 px-2 py-1.5 text-sm"
                     >
                       <option value="program_coordinator">Program Coordinator</option>
                       <option value="reader">Reader</option>
                       <option value="lead_reader">Lead Reader</option>
                     </select>
-                    <span className="text-sm text-gray-400">at</span>
+                    <span className="shrink-0 text-sm text-gray-400">at</span>
                     <select
                       value={a.institutionId}
+                      title={institutions.find((i: any) => i._id === a.institutionId)?.name || ''}
                       onChange={(e) => {
                         const inst = institutions.find((i: any) => i._id === e.target.value);
                         setRoleDraft((d) => d.map((x, i) => i === idx ? { ...x, institutionId: e.target.value, institutionName: inst?.name } : x));
                       }}
-                      className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                      className="w-0 min-w-0 flex-1 truncate rounded border border-gray-300 px-2 py-1.5 text-sm"
                     >
                       <option value="">— select institution —</option>
                       {institutions.map((inst: any) => (
@@ -999,7 +1002,9 @@ export function UserManagement() {
                     </select>
                     <button
                       onClick={() => setRoleDraft((d) => d.filter((_, i) => i !== idx))}
-                      className="rounded p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      className="shrink-0 rounded p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      data-testid={`edit-role-remove-${idx}`}
+                      aria-label="Remove role"
                       title="Remove role"
                     >
                       <Trash2 className="h-4 w-4" />

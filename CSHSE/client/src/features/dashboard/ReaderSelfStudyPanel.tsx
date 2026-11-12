@@ -1,7 +1,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { BookOpenCheck, ChevronRight, ClipboardList, FileText, Loader2 } from 'lucide-react';
+import { BookOpenCheck, ChevronRight, ClipboardList, FileText, Loader2, MessageSquare } from 'lucide-react';
 import { api } from '../../services/api';
 
 const API_BASE = '/api';
@@ -129,6 +129,15 @@ export function ReaderSelfStudyPanel(): JSX.Element {
                       className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
                     >
                       <FileText className="h-4 w-4" /> Read
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`reader-open-messages-${it._id}`}
+                      onClick={() => navigate(`/messages/${it._id}`)}
+                      title="Private conversations with the other readers on this review"
+                      className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <MessageSquare className="h-4 w-4" /> Messages
                     </button>
                     <button
                       type="button"

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
-import { Loader2, Send, MessageSquare } from 'lucide-react';
+import { Loader2, Send, MessageSquare, Plus, X } from 'lucide-react';
 import { useOnceHint } from '../../tour/useOnceHint';
 import { t } from '../../../i18n/strings';
 
@@ -37,7 +37,28 @@ export interface DmMessage {
   createdAt: string;
 }
 
+export interface DmRecipient {
+  _id: string;
+  name: string;
+  role: 'reader' | 'lead_reader';
+}
+
+export interface NewMessageDraft {
+  recipientIds: string[];
+  subject: string;
+  message: string;
+}
+
 export interface MessagesViewProps {
+  /** People on this submission's review team the user can write to. */
+  recipients?: DmRecipient[];
+  /** Open/closed state of the New message form (null = closed). */
+  newDraft?: NewMessageDraft | null;
+  onOpenNew?: () => void;
+  onChangeNew?: (next: NewMessageDraft | null) => void;
+  onSendNew?: () => void;
+  sendingNew?: boolean;
+  newError?: string | null;
   threads: DmThread[];
   isLoading: boolean;
   error?: string | null;
@@ -52,6 +73,13 @@ export interface MessagesViewProps {
 }
 
 export function MessagesView({
+  recipients = [],
+  newDraft = null,
+  onOpenNew,
+  onChangeNew,
+  onSendNew,
+  sendingNew,
+  newError,
   threads,
   isLoading,
   error,
@@ -87,8 +115,19 @@ export function MessagesView({
           id="messages-conversations-header"
           className="flex items-center justify-between border-b border-slate-200 px-3 py-2"
         >
-          <h2 className="text-sm font-semibold text-slate-800">Conversations</h2>
-          <span className="text-xs text-slate-500">{threads.length}</span>
+          <h2 className="text-sm font-semibold text-slate-800">
+            Conversations <span className="text-xs font-normal text-slate-500">{threads.length}</span>
+          </h2>
+          {onOpenNew && (
+            <button
+              type="button"
+              data-testid="messages-new"
+              onClick={onOpenNew}
+              className="inline-flex items-center gap-1 rounded bg-teal-600 px-2 py-1 text-xs font-medium text-white hover:bg-teal-700"
+            >
+              <Plus className="h-3 w-3" /> New message
+            </button>
+          )}
         </header>
         {threads.length === 0 ? (
           <div data-testid="messages-empty" className="p-6 text-center text-xs text-slate-500">
@@ -125,9 +164,84 @@ export function MessagesView({
       </aside>
 
       <section data-testid="thread-pane" className="flex h-[420px] flex-col rounded border border-slate-200 bg-white">
-        {!selectedThreadId ? (
+        {newDraft ? (
+          <form
+            data-testid="messages-new-form"
+            className="flex flex-1 flex-col gap-2 overflow-y-auto p-3 text-xs"
+            onSubmit={(e) => {
+              e.preventDefault();
+              onSendNew?.();
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-800">New message</h3>
+              <button type="button" aria-label="Cancel new message" data-testid="messages-new-cancel" onClick={() => onChangeNew?.(null)} className="rounded p-1 text-slate-400 hover:bg-slate-100">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <fieldset>
+              <legend className="mb-1 font-medium text-slate-700">To</legend>
+              {recipients.length === 0 ? (
+                <p data-testid="messages-new-no-recipients" className="text-slate-500">No one else is on this review team yet.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {recipients.map((r) => {
+                    const on = newDraft.recipientIds.includes(r._id);
+                    return (
+                      <label key={r._id} className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-1 ${on ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-300 text-slate-700'}`}>
+                        <input
+                          type="checkbox"
+                          data-testid={`messages-new-to-${r._id}`}
+                          checked={on}
+                          onChange={() =>
+                            onChangeNew?.({
+                              ...newDraft,
+                              recipientIds: on ? newDraft.recipientIds.filter((x) => x !== r._id) : [...newDraft.recipientIds, r._id],
+                            })
+                          }
+                          className="h-3 w-3"
+                        />
+                        {r.name}
+                        <span className="text-[10px] text-slate-500">{r.role === 'lead_reader' ? 'Lead reader' : 'Reader'}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </fieldset>
+            <input
+              data-testid="messages-new-subject"
+              value={newDraft.subject}
+              onChange={(e) => onChangeNew?.({ ...newDraft, subject: e.target.value })}
+              placeholder="Subject"
+              className="rounded border border-slate-300 px-2 py-1"
+              disabled={sendingNew}
+            />
+            <textarea
+              data-testid="messages-new-body"
+              value={newDraft.message}
+              onChange={(e) => onChangeNew?.({ ...newDraft, message: e.target.value })}
+              rows={6}
+              placeholder="Write your message… The program coordinator never sees these conversations."
+              className="flex-1 rounded border border-slate-300 px-2 py-1"
+              disabled={sendingNew}
+            />
+            {newError && <p className="rounded bg-red-50 px-2 py-1 text-red-800">{newError}</p>}
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                data-testid="messages-new-send"
+                disabled={sendingNew || !newDraft.recipientIds.length || !newDraft.subject.trim() || !newDraft.message.trim()}
+                className="inline-flex items-center gap-1 rounded bg-slate-800 px-3 py-1 text-xs font-medium text-white hover:bg-slate-900 disabled:opacity-50"
+              >
+                {sendingNew ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                Send
+              </button>
+            </div>
+          </form>
+        ) : !selectedThreadId ? (
           <div data-testid="thread-pane-empty" className="flex flex-1 items-center justify-center p-6 text-xs text-slate-500">
-            Select a conversation to view messages.
+            {onOpenNew ? 'Select a conversation, or start one with New message.' : 'Select a conversation to view messages.'}
           </div>
         ) : threadLoading ? (
           <div data-testid="thread-pane-loading" className="flex flex-1 items-center justify-center p-6 text-xs text-slate-500">
@@ -193,6 +307,28 @@ export function Messages({ submissionId }: MessagesProps): JSX.Element {
   const [selectedThreadId, setSelectedThreadId] = React.useState<string | null>(null);
   const [draft, setDraft] = React.useState('');
   const { fireOnce } = useOnceHint();
+  const [newDraft, setNewDraft] = React.useState<NewMessageDraft | null>(null);
+  const [newError, setNewError] = React.useState<string | null>(null);
+
+  const recipientsQuery = useQuery({
+    queryKey: ['dm-recipients', submissionId],
+    queryFn: async () => ((await api.get(`/api/submissions/${submissionId}/messages/recipients`)).data?.recipients || []) as DmRecipient[],
+    enabled: !!submissionId,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (d: NewMessageDraft) =>
+      (await api.post(`/api/submissions/${submissionId}/messages`, { subject: d.subject.trim(), participantIds: d.recipientIds, message: d.message.trim() })).data,
+    onSuccess: (data: any) => {
+      setNewDraft(null);
+      setNewError(null);
+      void qc.invalidateQueries({ queryKey: ['dm-threads', submissionId] });
+      if (data?.thread?._id) setSelectedThreadId(String(data.thread._id));
+    },
+    onError: (e: any) => setNewError(e?.response?.data?.error || 'Could not send the message.'),
+  });
 
   const threadsQuery = useQuery({
     queryKey: ['dm-threads', submissionId],
@@ -243,11 +379,24 @@ export function Messages({ submissionId }: MessagesProps): JSX.Element {
 
   return (
     <MessagesView
+      recipients={recipientsQuery.data || []}
+      newDraft={newDraft}
+      onOpenNew={() => {
+        setNewError(null);
+        setNewDraft({ recipientIds: [], subject: '', message: '' });
+      }}
+      onChangeNew={setNewDraft}
+      onSendNew={() => newDraft && createMutation.mutate(newDraft)}
+      sendingNew={createMutation.isPending}
+      newError={newError}
       threads={threadsQuery.data || []}
       isLoading={threadsQuery.isLoading}
       error={threadsQuery.error ? (threadsQuery.error as Error).message : null}
       selectedThreadId={selectedThreadId}
-      onSelectThread={(id) => setSelectedThreadId(id)}
+      onSelectThread={(id) => {
+        setNewDraft(null);
+        setSelectedThreadId(id);
+      }}
       messages={threadQuery.data?.messages || []}
       threadLoading={!!selectedThreadId && threadQuery.isLoading}
       draft={draft}

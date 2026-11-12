@@ -25,7 +25,7 @@ export interface RelayQueueComment {
   standardCode: string;
   specCode?: string | null;
   authorName: string;
-  authorRole: 'reader' | 'lead_reader';
+  authorRole: 'reader' | 'lead_reader' | 'program_coordinator';
   selectedText: string;
   content: string;
   relayed?: boolean;
@@ -48,7 +48,7 @@ export interface RelayConsoleViewProps {
 }
 
 export function RelayConsoleView({
-  comments,
+  comments: allComments,
   isLoading,
   error,
   draftsByComment,
@@ -58,6 +58,9 @@ export function RelayConsoleView({
   onUnrelay,
   onEscalate,
 }: RelayConsoleViewProps): JSX.Element {
+  // Only readers' / lead readers' comments are relayed to the program — never
+  // the coordinator's own notes (the server excludes them too).
+  const comments = allComments.filter((c) => c.authorRole !== 'program_coordinator');
   if (isLoading) {
     return (
       <div data-testid="relay-console-loading" className="flex items-center gap-2 p-6 text-slate-600">

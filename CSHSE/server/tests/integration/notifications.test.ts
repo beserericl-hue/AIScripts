@@ -181,10 +181,13 @@ describe('CR-010 — DM notification fan-out', () => {
       .send({ subject: 'About 1.b', participantIds: [r2Id], message: 'Please clarify 1.b.' });
     expect(res.status).toBe(201);
 
-    // give the fire-and-forget fan-out a tick to land
-    await new Promise((r) => setTimeout(r, 50));
-
-    const r2Notifs = await Notification.find({ recipientId: r2Id }).lean();
+    // the fan-out is fire-and-forget: poll until it lands (a fixed 50 ms
+    // sleep lost the race under a loaded test run)
+    let r2Notifs: any[] = [];
+    for (let i = 0; i < 60 && !r2Notifs.length; i++) {
+      r2Notifs = await Notification.find({ recipientId: r2Id }).lean();
+      if (!r2Notifs.length) await new Promise((r) => setTimeout(r, 50));
+    }
     expect(r2Notifs.length).toBe(1);
     expect(r2Notifs[0].type).toBe('dm.new_message');
     expect(r2Notifs[0].title).toMatch(/Lead Linda/);

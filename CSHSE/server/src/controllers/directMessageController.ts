@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { DirectMessageThread, DirectMessage, DmParticipantRole } from '../models/DirectMessage';
 import { User } from '../models/User';
+import { Submission } from '../models/Submission';
+import { Assignment } from '../models/Assignment';
 import { notifyMany } from '../services/notificationService';
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
@@ -39,6 +41,28 @@ function _isElevated(req: AuthenticatedRequest): boolean {
 
 function _canParticipate(role: string): role is DmParticipantRole {
   return role === 'reader' || role === 'lead_reader' || role === 'admin';
+}
+
+/**
+ * The submission's review team (assigned readers + lead reader). Being on it is
+ * what makes someone a valid DM participant for this submission — their
+ * primary User.role may be program_coordinator if they coordinate another
+ * school (role-by-institution), so the global role alone is not enough.
+ */
+async function _reviewTeam(subOrTrue: any, submissionId: string): Promise<{ readers: string[]; lead: string | null }> {
+  const sub = subOrTrue && subOrTrue !== true && subOrTrue.assignedReaders !== undefined
+    ? subOrTrue
+    : await Submission.findById(submissionId).select('assignedReaders leadReader').lean();
+  const readers = new Set<string>(((sub as any)?.assignedReaders || []).map((x: any) => String(x)));
+  let lead: string | null = (sub as any)?.leadReader ? String((sub as any).leadReader) : null;
+  // Active Assignment rows are the other (newer) source of the team.
+  const rows = await Assignment.find({ submissionId, status: 'active' }).select('userId assignmentType').lean();
+  for (const r of rows as any[]) {
+    if (r.assignmentType === 'lead_reader') lead = lead || String(r.userId);
+    else readers.add(String(r.userId));
+  }
+  if (lead) readers.delete(lead);
+  return { readers: [...readers], lead };
 }
 
 function _actorName(req: AuthenticatedRequest): string {
@@ -136,10 +160,8 @@ export const createThread = async (req: AuthenticatedRequest, res: Response) => 
 
     // SECURITY (cross-tenant): a reader/lead may only start a thread on a
     // submission they can access (active assignment); admins/superusers pass.
-    {
-      const _sub = await requireSubmissionAccess(req as any, res, submissionId);
-      if (!_sub) return;
-    }
+    const _sub = await requireSubmissionAccess(req as any, res, submissionId);
+    if (!_sub) return;
 
     const {
       subject,
@@ -164,13 +186,17 @@ export const createThread = async (req: AuthenticatedRequest, res: Response) => 
       .filter((id: string) => String(id) !== String(req.user!.id))
       .map((id: string) => new mongoose.Types.ObjectId(id));
 
-    // Verify all OTHER participants are eligible roles (no PCs allowed).
+    // Verify all OTHER participants are eligible: on this submission's review
+    // team, or a reader / lead reader / admin by role. This school's program
+    // coordinator is never eligible.
     if (otherIds.length > 0) {
       const others = await User.find({ _id: { $in: otherIds } }).select('role').lean();
       if (others.length !== otherIds.length) {
         return res.status(400).json({ error: 'One or more participantIds not found' });
       }
-      const ineligible = others.find((u) => !_canParticipate(u.role));
+      const team = await _reviewTeam(_sub, submissionId);
+      const onTeam = new Set([...team.readers, ...(team.lead ? [team.lead] : [])]);
+      const ineligible = others.find((u: any) => !onTeam.has(String(u._id)) && !_canParticipate(u.role));
       if (ineligible) {
         return res.status(400).json({ error: 'PCs cannot be DM participants' });
       }
@@ -213,6 +239,37 @@ export const createThread = async (req: AuthenticatedRequest, res: Response) => 
   } catch (err) {
     console.error('createThread error:', err);
     return res.status(500).json({ error: 'Failed to create thread' });
+  }
+};
+
+/**
+ * GET /api/submissions/:submissionId/messages/recipients
+ * Who the caller can start a conversation with on this submission: the other
+ * members of its review team (assigned readers + lead reader).
+ */
+export const listRecipients = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (_denyIfPC(req, res)) return;
+    if (!_canParticipate(req.user?.role || '') && !req.user?.isSuperuser) {
+      return res.status(403).json({ error: 'Only readers / lead readers / admins can start DM threads' });
+    }
+    const { submissionId } = req.params;
+    const _sub = await requireSubmissionAccess(req as any, res, submissionId);
+    if (!_sub) return;
+    const team = await _reviewTeam(_sub, submissionId);
+    const ids = [...new Set([...(team.lead ? [team.lead] : []), ...team.readers])].filter((id) => id !== String(req.user!.id));
+    const users = await User.find({ _id: { $in: ids }, isActive: { $ne: false } }).select('firstName lastName').lean();
+    const byId = new Map(users.map((u: any) => [String(u._id), u]));
+    const recipients = ids
+      .filter((id) => byId.has(id))
+      .map((id) => {
+        const u: any = byId.get(id);
+        return { _id: id, name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Reader', role: id === team.lead ? 'lead_reader' : 'reader' };
+      });
+    return res.json({ recipients });
+  } catch (err) {
+    console.error('listRecipients error:', err);
+    return res.status(500).json({ error: 'Failed to load recipients' });
   }
 };
 
