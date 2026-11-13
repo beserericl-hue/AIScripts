@@ -12,7 +12,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Rocket, Loader2, X, Upload, Sparkles, ChevronUp, ChevronDown } from 'lucide-react';
-import { useAIImportStore, type Tag, type BucketItem, type SpecBucket } from '../../../../../store/aiImportStore';
+import { useAIImportStore, emptyIntroBucket, type Tag, type BucketItem, type SpecBucket } from '../../../../../store/aiImportStore';
 import { SpecRail, UNPLACED_KEY, UNWRITTEN_KEY, INTRO_DOC_KEY, introStandardKey } from '../review/SpecRail';
 // Any selectedSpecKey starting with '_' is a synthetic rail key (unplaced,
 // cvs, evidence-docs, papers, syllabi, etc.) — none of them map to a real
@@ -1013,12 +1013,9 @@ function FullReviewStep(): JSX.Element {
     (text: string, location: { paragraphIndex?: number; html?: string }) => {
       if (!introTarget) return;
       const current = useAIImportStore.getState().introductions;
-      const bucket = current[introTarget];
-      if (!bucket) {
-        setSourceOpen(false);
-        setIntroTarget(null);
-        return;
-      }
+      // No bucket yet when the import found no introduction for this
+      // standard — the coordinator's passage starts one.
+      const bucket = current[introTarget] ?? emptyIntroBucket(introTarget);
       const localItem: BucketItem = {
         sectionId: `intro-correction-${Date.now().toString(36)}`,
         heading:

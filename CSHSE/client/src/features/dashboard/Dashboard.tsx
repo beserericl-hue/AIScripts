@@ -1263,7 +1263,8 @@ export function Dashboard() {
                               inst.assignedReaderIds.length > 0 ? (
                                 <span className="text-sm text-gray-900">
                                   {inst.assignedReaderIds
-                                    .map((r) => `${r.firstName} ${r.lastName}`)
+                                    .filter((r) => r && typeof r === 'object' && (r.firstName || r.lastName))
+                                    .map((r) => `${r.firstName ?? ''} ${r.lastName ?? ''}`.trim())
                                     .join(', ')}
                                 </span>
                               ) : (
