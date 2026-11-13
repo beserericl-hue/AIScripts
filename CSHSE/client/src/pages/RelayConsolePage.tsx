@@ -96,7 +96,7 @@ function RelayPicker(): JSX.Element {
                 </p>
               </div>
               <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
-                {s.status.replace(/_/g, ' ')}
+                {RELAY_STATUS_LABEL[s.status] || s.status.replace(/_/g, ' ')}
               </span>
             </Link>
           </li>
@@ -105,6 +105,16 @@ function RelayPicker(): JSX.Element {
     </div>
   );
 }
+
+// Same wording as the reader / lead dashboards' status badges.
+export const RELAY_STATUS_LABEL: Record<string, string> = {
+  submitted: 'Submitted',
+  under_review: 'Under review',
+  readers_assigned: 'Assigned for review',
+  review_complete: 'Review complete',
+  compliant: 'Found compliant',
+  non_compliant: 'Found non-compliant',
+};
 
 export default function RelayConsolePage(): JSX.Element {
   const { submissionId } = useParams<{ submissionId?: string }>();
