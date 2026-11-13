@@ -21,6 +21,7 @@ import type {
   CVItem,
   EvidenceDocItem
 } from '../../../../../store/aiImportStore';
+import { emptyIntroBucket } from '../../../../../store/aiImportStore';
 
 export const UNPLACED_KEY = '_unplaced';
 
@@ -300,7 +301,7 @@ export function SpecRail({
             coordinators routing intro material always have a target with
             zero scrolling. Only render if the bucket exists; ItemCardList
             handles the empty state. */}
-        {introductions?.document && (
+        {introductions && (
           <div className="mb-2 flex items-center gap-1" data-tour="review-doc-intro">
             <button
               role="tab"
@@ -317,9 +318,9 @@ export function SpecRail({
                 <BookOpen className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
                 <span className="font-medium">Document Introduction</span>
               </span>
-              {introductions.document.items.length > 0 && (
+              {(introductions.document?.items.length ?? 0) > 0 && (
                 <span className="rounded bg-cshse-200 px-1.5 text-xs text-cshse-800">
-                  {introductions.document.items.length}
+                  {introductions.document!.items.length}
                 </span>
               )}
             </button>
@@ -462,12 +463,12 @@ export function SpecRail({
           );
           if (visible.length === 0) return null;
           // CR-039 — per-Standard Introduction sibling above the spec list.
-          // Only render when the IntroductionBucket exists for this
-          // standard. Empty buckets get a faint count badge ("0") to
+          // Always rendered (an import keeps no bucket for an empty
+          // introduction, but the coordinator can still add one from source). Empty buckets get a faint count badge ("0") to
           // signal the row is intentionally there but has no items yet —
           // coordinators can still click to land on the bucket and
           // Reassign material in.
-          const intro = introductions?.[`standard-${std}`];
+          const intro = introductions ? introductions[`standard-${std}`] ?? emptyIntroBucket(`standard-${std}`) : undefined;
           return (
             <div key={std} className="mb-2" data-tour="review-standards">
               <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500">

@@ -399,4 +399,34 @@ describe('<SpecRail />', () => {
     await userEvent.click(addButtons[1]);
     expect(onAddFromSourceForIntro).toHaveBeenCalledWith('standard-3');
   });
+
+  it('POSITIVE: a standard with no introduction bucket still shows its Introduction row and + Add (the import drops empty / prompt-only intros)', async () => {
+    const buckets = mkBuckets({ standardCode: '4', specCode: 'a' });
+    const onAddFromSourceForIntro = vi.fn();
+    render(
+      <SpecRail
+        buckets={buckets}
+        tags={NO_TAGS}
+        placeholders={NO_PLACEHOLDERS}
+        selectedKey={null}
+        onSelect={() => {}}
+        introductions={{}}
+        onAddFromSourceForIntro={onAddFromSourceForIntro}
+      />
+    );
+    const addButtons = screen.getAllByRole('button', { name: /^\+ Add$/i });
+    expect(addButtons.length).toBe(2); // document + standard-4, though neither bucket exists
+    await userEvent.click(addButtons[1]);
+    expect(onAddFromSourceForIntro).toHaveBeenCalledWith('standard-4');
+  });
+
+  it('NEGATIVE: an empty introduction shows no count badge', () => {
+    const buckets = mkBuckets({ standardCode: '4', specCode: 'a' });
+    render(
+      <SpecRail buckets={buckets} tags={NO_TAGS} placeholders={NO_PLACEHOLDERS} selectedKey={null} onSelect={() => {}} introductions={{}} />
+    );
+    for (const row of screen.getAllByRole('tab', { name: /Introduction/ })) {
+      expect(row.textContent?.replace(/Standard \d+|Document/g, '')).not.toMatch(/\d/);
+    }
+  });
 });

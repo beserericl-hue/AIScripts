@@ -30,6 +30,7 @@ import {
   type CVItem,
   type EvidenceDocItem,
   type IntroductionBucket,
+  emptyIntroBucket,
   type PlaceholderSection,
   type SpecBucket,
   type Tag
@@ -795,7 +796,7 @@ export function ItemCardList({
   const activeIntroBucket: IntroductionBucket | null = useMemo(() => {
     if (!selectedKey || !isIntroKey(selectedKey) || !introductions) return null;
     const key = introBucketKeyFromSpecKey(selectedKey);
-    return introductions[key] ?? null;
+    return introductions[key] ?? emptyIntroBucket(key);
   }, [selectedKey, introductions]);
 
   const items = useMemo<CardItem[]>(() => {

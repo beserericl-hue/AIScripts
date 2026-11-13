@@ -37,6 +37,8 @@ export const getInstitutions = async (req: AuthenticatedRequest, res: Response) 
       Institution.find(query)
         .populate('programCoordinatorId', 'firstName lastName email')
         .populate('assignedLeadReaderId', 'firstName lastName email')
+        // The dashboard's deadlines table lists readers by name.
+        .populate('assignedReaderIds', 'firstName lastName email')
         .sort({ name: 1 })
         .skip(skip)
         .limit(limitNum)

@@ -135,6 +135,17 @@ export type IntroductionBucket = {
   items: BucketItem[];
 };
 
+/**
+ * An introduction with no drafts yet. Imports keep no bucket for a standard
+ * whose introduction is empty (or only CSHSE's prompt), but the coordinator
+ * must still see the row and be able to add a passage from the source.
+ */
+export function emptyIntroBucket(key: string): IntroductionBucket {
+  return key === 'document'
+    ? { scope: 'document', standardCode: null, items: [] }
+    : { scope: 'standard', standardCode: key.replace(/^standard-/, ''), items: [] };
+}
+
 // CR-039 — convert a Tag (Unplaced rail) into an Introduction-bucket item.
 // The template pipeline routes EVERY document/standard introduction (incl. the
 // glossary) to the Tags rail, and low-confidence self-study intros land there
