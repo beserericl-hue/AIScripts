@@ -100,4 +100,14 @@ describe('RelayConsolePage — per-submission queue', () => {
     await waitFor(() => expect(screen.getByTestId('relay-console-empty')).toBeInTheDocument());
     expect(mockGet).toHaveBeenCalledWith('/api/submissions/sub-123/comments/relay-queue');
   });
+
+  it('shows friendly status labels, never raw codes', async () => {
+    mockGet.mockResolvedValue({
+      data: { submissions: [{ _id: 'r1', institutionName: 'Readers U', programName: 'HS', programLevel: 'associate', status: 'readers_assigned' }] },
+    });
+    renderAt('/relay');
+    await waitFor(() => expect(screen.getByTestId('relay-pick-r1')).toBeInTheDocument());
+    expect(screen.getByTestId('relay-pick-r1')).toHaveTextContent('Assigned for review');
+    expect(screen.getByTestId('relay-pick-r1')).not.toHaveTextContent(/readers assigned/);
+  });
 });
