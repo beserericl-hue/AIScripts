@@ -354,6 +354,8 @@ export interface CoverageReviewRequest {
     standardCode: string;
     specCode: string;
     narrativeText?: string;
+    /** Narrative HTML — sent only when it contains pictures, which cshse-ai attaches as figures. */
+    narrativeHtml?: string;
     evidence?: Array<{ heading?: string; snippet?: string }>;
   }>;
   libraryFileNames?: string[];

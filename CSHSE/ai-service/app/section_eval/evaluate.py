@@ -24,6 +24,7 @@ from anthropic import Anthropic
 from app.config import Settings, get_settings
 from app.section_eval.scrape import scrape_link, MAX_TEXT_CHARS
 from app.evidence.retrieve import retrieve_evidence_chunks
+from app.figures import CONDITIONAL_RULE, FIGURES_RULE, Figure, image_blocks, split_figures
 
 _HAIKU_MODEL = "claude-haiku-4-5"
 # Headroom so the assembled prompt (narrative ≤6k + bounded evidence ≤9k +
@@ -31,7 +32,13 @@ _HAIKU_MODEL = "claude-haiku-4-5"
 # 12k ceiling cut the JSON instructions once evidence carried real text, which
 # made the model emit non-JSON ("could not parse model response"). claude-haiku
 # has a 200k context, so 40k chars (~10k tokens) is comfortable. 2026-06-08.
-_MAX_INPUT_CHARS = 40000
+# The narrative is the institution's whole answer and must be read in FULL —
+# self-studies often put the key data in the middle or at the end. A 6k cap cut
+# long answers off mid-sentence and the model then reported them "incomplete"
+# (Kennesaw 7.c, 2026-11-17). These are only safety ceilings against the model's
+# context window (~200k tokens ≈ 800k chars); real narratives are sent whole.
+_NARRATIVE_CHARS = 500_000
+_MAX_INPUT_CHARS = 600_000
 _MAX_TOKENS_OUT = 1500  # headroom so an evidence-rich reply isn't truncated mid-JSON
 
 _VALID_VERDICTS = {"pass", "needs_improvement", "fail"}
@@ -49,6 +56,7 @@ def _build_prompt(
     correction_hints: str = "",
     library_file_names: Optional[list[str]] = None,
     retrieved_chunks: Optional[list] = None,
+    figure_count: int = 0,
 ) -> str:
     # Bound the evidence block to a fixed char budget so it can never push the
     # JSON-format instructions (built at the END of this prompt) past
@@ -95,7 +103,7 @@ def _build_prompt(
         f"Specification: Standard {standard_code}.{spec_code}\n"
         f"Rubric criteria:\n{criteria or '(criteria not supplied)'}\n"
         f"{hints_block}\n"
-        f"=== Narrative ===\n{(narrative or '(empty)')[:6000]}\n\n"
+        f"=== Narrative ===\n{(narrative or '(empty)')[:_NARRATIVE_CHARS]}\n\n"
         f"=== Supporting evidence (text) ===\n{ev_block}\n\n"
         f"=== Submitted files ===\n{files_block}\n\n"
         f"=== Web links (scraped text; non-text links flagged) ===\n{links_block}\n\n"
@@ -126,7 +134,10 @@ def _build_prompt(
         "and evaluation).\n"
         "3. Documents/tables/forms: when the criterion asks that a document, table, or form be "
         "PROVIDED, its EXISTENCE in the file library satisfies it — do not fail because a table's "
-        "exact cell contents can't be read from the extracted text.\n\n"
+        "exact cell contents can't be read from the extracted text.\n"
+        f"4. {CONDITIONAL_RULE}\n"
+        + (f"5. {FIGURES_RULE} ({figure_count} figure(s) attached above.)\n" if figure_count else "")
+        + "\n"
         "Reply with STRICT JSON only:\n"
         "{\"verdict\": \"pass|needs_improvement|fail\", "
         "\"rationale\": \"<short paragraph grounded in the criteria>\", "
@@ -180,7 +191,9 @@ def _evaluate_one_spec(
     library_file_names: Optional[list[str]] = None,
     institution_id: Optional[str] = None,
     submission_id: Optional[str] = None,
+    figures: Optional[list[Figure]] = None,
 ) -> dict:
+    figures = figures or []
     std = str(spec.get("standardCode", ""))
     sp = str(spec.get("specCode", ""))
     sources_used = {
@@ -215,6 +228,7 @@ def _evaluate_one_spec(
             retrieve_evidence_chunks(institution_id, submission_id or "", str(spec.get("criteria", "")))
             if institution_id else []
         ),
+        figure_count=len(figures),
     )
     if len(prompt) > _MAX_INPUT_CHARS:
         prompt = prompt[:_MAX_INPUT_CHARS]
@@ -230,7 +244,9 @@ def _evaluate_one_spec(
                 model=_HAIKU_MODEL,
                 max_tokens=_MAX_TOKENS_OUT,
                 temperature=0,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": (
+                    [*image_blocks(figures), {"type": "text", "text": prompt}] if figures else prompt
+                )}],
             )
             raw = "".join(b.text for b in msg.content if getattr(b, "text", None))
         except Exception as exc:  # noqa: BLE001 — never crash the caller
@@ -296,7 +312,10 @@ def evaluate_section(
         Anthropic(api_key=settings.anthropic_api_key) if settings.anthropic_api_key else None
     )
 
-    narrative = narrative_html or ""
+    # Narrative arrives as editor HTML: turn it into readable text and pull out
+    # embedded pictures (charts/tables as images) to attach as figures — raw HTML
+    # with inline base64 images used to fill the narrative window with markup.
+    narrative, figures = split_figures(narrative_html or "")
 
     def _hints_for(spec: dict) -> str:
         # CR-049 Phase 4b — pull prior reader-override hints for this spec so
@@ -320,6 +339,7 @@ def evaluate_section(
             library_file_names=library_file_names,
             institution_id=institution_id,
             submission_id=submission_id,
+            figures=figures,
         )
         for spec in specs
     ]

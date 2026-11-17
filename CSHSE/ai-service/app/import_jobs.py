@@ -445,13 +445,15 @@ def _ensure_coverage(job: "JobRecord") -> None:
         std, spec = b.get("standardCode"), b.get("specCode")
         if not std or not spec:
             continue
-        narrative_text = "\n\n".join((n.get("snippet") or "")[:3000] for n in narr).strip()
+        from app.figures import narrative_text_and_figures
+        narrative_text, figures = narrative_text_and_figures(narr)
         evidence_items = [
             ((e.get("heading") or "")[:80], (e.get("snippet") or "")[:1500]) for e in [*evt, *evf]
         ]
         items.append({
             "key": key, "standard_code": str(std), "spec_code": str(spec),
             "narrative_text": narrative_text, "evidence_items": evidence_items,
+            "figures": figures,
         })
 
     if not items:
@@ -846,7 +848,7 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 {
                     "sectionId": f"{job.job_id}:mccintro",
                     "heading": "Program Introduction",
-                    "snippet": intro_text[:4000],
+                    "snippet": intro_text,  # whole text — reviewers must read all of it
                     "htmlSnippet": _text_to_html(intro_text, intro_link_map),
                     "wordCount": len(intro_text.split()),
                     "confidence": None,
@@ -931,7 +933,7 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
         item = {
             "sectionId": f"{job.job_id}:mccstdintro:{std_code}:{_uuid.uuid4().hex[:6]}",
             "heading": heading,
-            "snippet": body[:4000],
+            "snippet": body,  # whole text — key data is often in the middle or at the end
             "htmlSnippet": _text_to_html(body, link_map),
             "wordCount": len(body.split()),
             "confidence": None,
@@ -975,7 +977,7 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 bk["narratives"].append({
                     "sectionId": section_id,
                     "heading": heading,
-                    "snippet": body[:4000],
+                    "snippet": body,  # whole text — key data is often in the middle or at the end
                     "htmlSnippet": chunk_html,
                     "wordCount": len(body.split()),
                     "confidence": 0.95,
@@ -1606,13 +1608,14 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
         with ThreadPoolExecutor(max_workers=6) as ex:
             def _review_one(spec):
                 bucket = buckets[f"{spec.standard_code}.{spec.spec_code}"]
-                narrative_text = "\n\n".join(n["snippet"][:3000] for n in bucket["narratives"]).strip()
+                from app.figures import narrative_text_and_figures
+                narrative_text, figures = narrative_text_and_figures(bucket["narratives"])
                 evidence_items = [
                     (e["heading"][:80], e["snippet"][:1500]) for e in bucket["evidenceText"]
                 ] + [
                     (f["heading"][:80], f["snippet"][:1500]) for f in bucket["evidenceFiles"]
                 ]
-                return spec, reviewer.review(spec, narrative_text, evidence_items)
+                return spec, reviewer.review(spec, narrative_text, evidence_items, figures=figures)
 
             futures = {ex.submit(_review_one, s): s for s in filled}
             for fut in as_completed(futures):
@@ -2017,13 +2020,14 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
         with ThreadPoolExecutor(max_workers=8) as ex:
             def _review_one(spec):
                 bucket = buckets[f"{spec.standard_code}.{spec.spec_code}"]
-                narrative_text = "\n\n".join(n["snippet"][:3000] for n in bucket["narratives"]).strip()
+                from app.figures import narrative_text_and_figures
+                narrative_text, figures = narrative_text_and_figures(bucket["narratives"])
                 evidence_items = [
                     (e["heading"][:80], e["snippet"][:1500]) for e in bucket["evidenceText"]
                 ] + [
                     (f["heading"][:80], f["snippet"][:1500]) for f in bucket["evidenceFiles"]
                 ]
-                return spec, reviewer.review(spec, narrative_text, evidence_items)
+                return spec, reviewer.review(spec, narrative_text, evidence_items, figures=figures)
             futures = {ex.submit(_review_one, s): s for s in filled}
             for fut in as_completed(futures):
                 spec, rv = fut.result()

@@ -2240,7 +2240,7 @@ export async function assessCoverageForKeys(submissionId: string, keys: string[]
     }
   };
 
-  const specs: Array<{ standardCode: string; specCode: string; narrativeText: string; evidence: any[]; _key: string }> = [];
+  const specs: Array<{ standardCode: string; specCode: string; narrativeText: string; narrativeHtml?: string; evidence: any[]; _key: string }> = [];
   for (const key of keys) {
     const b = state.buckets[key] as any;
     if (!b) continue;
@@ -2263,7 +2263,14 @@ export async function assessCoverageForKeys(submissionId: string, keys: string[]
     let narrativeText = narr
       .map((n: any) => (n.htmlSnippet ? htmlToPlain(n.htmlSnippet) : n.snippet || ''))
       .join('\n\n')
-      .slice(0, 11500);
+      // The WHOLE answer — key data is often in the middle or at the end (was
+      // 11.5k, so long answers read as "cut off mid-sentence"). Safety ceiling only.
+      .slice(0, 500000);
+    // Pictures in the narrative (charts, tables pasted as images) carry required
+    // data — e.g. a race/ethnicity chart for 1.e. Send the HTML when it has any so
+    // cshse-ai attaches them to the review instead of reporting the data missing.
+    const narrHtmlJoined = narr.map((n: any) => (n.htmlSnippet as string) || '').join('\n');
+    const narrativeHtml = /<img\b/i.test(narrHtmlJoined) ? narrHtmlJoined : undefined;
     if (specLinks.size) narrativeText += '\n\nCited web links: ' + [...specLinks].slice(0, 8).join(' ');
     const evidence = [...evt, ...evf].map((e: any) => ({
       heading: e.heading || '',
@@ -2277,7 +2284,7 @@ export async function assessCoverageForKeys(submissionId: string, keys: string[]
       })
     );
     evidence.push(...assignedEvidence);
-    specs.push({ standardCode: String(std), specCode: String(spec), narrativeText, evidence, _key: key });
+    specs.push({ standardCode: String(std), specCode: String(spec), narrativeText, narrativeHtml, evidence, _key: key });
   }
   if (specs.length === 0) return 0;
 
@@ -2290,7 +2297,7 @@ export async function assessCoverageForKeys(submissionId: string, keys: string[]
     programLevel,
     institutionId: String(submission.institutionId),
     submissionId: String(submission._id),
-    specs: specs.map((s) => ({ standardCode: s.standardCode, specCode: s.specCode, narrativeText: s.narrativeText, evidence: s.evidence })),
+    specs: specs.map((s) => ({ standardCode: s.standardCode, specCode: s.specCode, narrativeText: s.narrativeText, ...(s.narrativeHtml ? { narrativeHtml: s.narrativeHtml } : {}), evidence: s.evidence })),
     libraryFileNames,
   });
   if (error && results.length === 0) return 0;

@@ -127,6 +127,7 @@ class CoverageSpecItem(BaseModel):
     standardCode: str
     specCode: str
     narrativeText: str = ""
+    narrativeHtml: str = Field("", description="Narrative HTML; when it holds inline pictures they are attached to the review as figures")
     evidence: list[dict] = Field(default_factory=list, description="[{heading, snippet}] supporting-evidence items")
 
 
@@ -716,18 +717,34 @@ async def coverage_review_endpoint(req: CoverageReviewRequest, request: Request)
     verify_hmac_signature(request, body)
     try:
         from app.coverage.spec_coverage import review_specs
+        from app.figures import split_figures
 
         settings = get_settings()
+
+        def _narr(s):
+            # Pictures in the narrative (charts/tables as images) are attached so
+            # the reviewer can read them; the text keeps [Figure N] markers.
+            if s.narrativeHtml and "<img" in s.narrativeHtml.lower():
+                text, figs = split_figures(s.narrativeHtml)
+                # Keep the server's "Cited web links: …" tail so links still get fetched.
+                tail = (s.narrativeText or "").rpartition("\n\nCited web links: ")
+                if tail[1]:
+                    text += "\n\nCited web links: " + tail[2]
+                return text, figs
+            return (s.narrativeText or ""), []
+
+        _prepared = [(_narr(s), s) for s in req.specs]
         items = [
             {
                 "standard_code": s.standardCode,
                 "spec_code": s.specCode,
-                "narrative_text": s.narrativeText or "",
+                "narrative_text": nt,
+                "figures": figs,
                 "evidence_items": [
                     ((e.get("heading") or "")[:80], (e.get("snippet") or "")[:1500]) for e in (s.evidence or [])
                 ],
             }
-            for s in req.specs
+            for ((nt, figs), s) in _prepared
         ]
         reviews = review_specs(req.programLevel, settings.anthropic_api_key, items, library_file_names=req.libraryFileNames, institution_id=req.institutionId or None, submission_id=req.submissionId or None)
         return {
