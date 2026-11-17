@@ -24,7 +24,7 @@ from anthropic import Anthropic
 from app.config import Settings, get_settings
 from app.section_eval.scrape import scrape_link, MAX_TEXT_CHARS
 from app.evidence.retrieve import retrieve_evidence_chunks
-from app.figures import CONDITIONAL_RULE, FIGURES_RULE, Figure, image_blocks, split_figures
+from app.figures import CONDITIONAL_RULE, EXAMPLES_RULE, FIGURES_RULE, Figure, image_blocks, split_figures
 from app.standards.loader import clean_spec_text
 
 _HAIKU_MODEL = "claude-haiku-4-5"
@@ -137,7 +137,8 @@ def _build_prompt(
         "PROVIDED, its EXISTENCE in the file library satisfies it — do not fail because a table's "
         "exact cell contents can't be read from the extracted text.\n"
         f"4. {CONDITIONAL_RULE}\n"
-        + (f"5. {FIGURES_RULE} ({figure_count} figure(s) attached above.)\n" if figure_count else "")
+        f"5. {EXAMPLES_RULE}\n"
+        + (f"6. {FIGURES_RULE} ({figure_count} figure(s) attached above.)\n" if figure_count else "")
         + "\n"
         "Reply with STRICT JSON only:\n"
         "{\"verdict\": \"pass|needs_improvement|fail\", "

@@ -203,3 +203,13 @@ CONDITIONAL_RULE = (
     "Do not require the conditional documentation. Only when it is unclear whether the condition "
     "applies, suggest the program state its establishment date explicitly."
 )
+
+EXAMPLES_RULE = (
+    "EXAMPLES ARE NOT REQUIREMENTS: items a specification introduces with 'may include', 'such as', "
+    "'among others', 'for example' or 'e.g.' are illustrations of acceptable content, not a checklist. "
+    "Judge whether the CORE ask (e.g. 'describe the process for faculty and staff evaluation') is "
+    "substantively answered; never list an unmentioned example as a gap or lower the score for it — at "
+    "most mention it as an optional suggestion. Likewise, when the specification asks the program to "
+    "DESCRIBE a process, a clear description satisfies it; do not demand attached proof documents unless "
+    "the specification explicitly asks for them to be provided."
+)
