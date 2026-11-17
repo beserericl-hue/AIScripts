@@ -315,3 +315,17 @@ def test_section_eval_strips_leaked_context_from_criteria():
                      narrative_html="<p>Budget course HS 4400.</p>", anthropic=client, settings=SimpleNamespace(anthropic_api_key="x"))
     txt = _prompt_text(client.messages.calls[0])
     assert "Budget and financial management." in txt and "Client-Related Values" not in txt
+
+
+def test_examples_rule_in_both_prompts(monkeypatch):
+    import app.coverage.spec_coverage as sc
+    from app.section_eval.evaluate import evaluate_section
+
+    monkeypatch.setattr(sc, "_scrape_narrative_links", lambda t: [])
+    rv = _reviewer()
+    rv.review(_spec("7", "c", "Documentation may include, among others, student evaluations and peer review."), "We evaluate annually.", [])
+    assert "EXAMPLES ARE NOT REQUIREMENTS" in _prompt_text(rv._client.messages.calls[0])
+    client = _FakeClient(_EVAL_REPLY)
+    evaluate_section(institution_id="i", submission_id="", specs=[{"standardCode": "7", "specCode": "c", "criteria": "c"}],
+                     narrative_html="<p>x</p>", anthropic=client, settings=SimpleNamespace(anthropic_api_key="x"))
+    assert "EXAMPLES ARE NOT REQUIREMENTS" in _prompt_text(client.messages.calls[0])

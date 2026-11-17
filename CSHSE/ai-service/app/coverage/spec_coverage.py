@@ -25,7 +25,7 @@ from anthropic import Anthropic, APIStatusError, InternalServerError, RateLimitE
 from app.standards.loader import Specification
 from app.evidence.retrieve import retrieve_evidence_chunks
 from app.section_eval.scrape import scrape_link
-from app.figures import CONDITIONAL_RULE, FIGURES_RULE, Figure, image_blocks
+from app.figures import CONDITIONAL_RULE, EXAMPLES_RULE, FIGURES_RULE, Figure, image_blocks
 
 _URL_RE = re.compile(r"https?://[^\s\"'<>)]+")
 
@@ -160,7 +160,8 @@ def _build_prompt(
         "   be PROVIDED, its EXISTENCE in the file library satisfies that — do not treat it as a",
         "   gap because a table's exact cell contents can't be read from the extracted text.",
         "4. " + CONDITIONAL_RULE,
-        *(["5. " + FIGURES_RULE + f" ({figure_count} figure(s) attached above.)"] if figure_count else []),
+        "5. " + EXAMPLES_RULE,
+        *(["6. " + FIGURES_RULE + f" ({figure_count} figure(s) attached above.)"] if figure_count else []),
         "",
         "Evaluate: does the combined narrative + supporting evidence above",
         "adequately address the Specification's prompt? Identify SPECIFIC gaps",
