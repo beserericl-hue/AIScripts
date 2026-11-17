@@ -221,7 +221,7 @@ class _FakeReviewer:
     def __init__(self, *a, **k):
         pass
 
-    def review(self, spec, narrative_text, evidence_items):
+    def review(self, spec, narrative_text, evidence_items, **_kw):
         return SimpleNamespace(coverage_score=1.0, is_covered=True, gaps=[], strengths=[])
 
 

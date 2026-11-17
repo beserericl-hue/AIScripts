@@ -25,6 +25,7 @@ from anthropic import Anthropic, APIStatusError, InternalServerError, RateLimitE
 from app.standards.loader import Specification
 from app.evidence.retrieve import retrieve_evidence_chunks
 from app.section_eval.scrape import scrape_link
+from app.figures import CONDITIONAL_RULE, FIGURES_RULE, Figure, image_blocks
 
 _URL_RE = re.compile(r"https?://[^\s\"'<>)]+")
 
@@ -52,7 +53,13 @@ def _scrape_narrative_links(narrative_text: str, max_links: int = 4) -> list[tup
     return out
 
 DEFAULT_MODEL = "claude-haiku-4-5"
-CONTENT_CHAR_LIMIT = 8000  # cap total content sent per spec to control cost
+CONTENT_CHAR_LIMIT = 8000  # cap total SUPPORTING-EVIDENCE content sent per spec to control cost
+# The narrative is the institution's actual answer — the reviewer must read ALL
+# of it: self-studies often put the key data in the middle or at the end. A 3k/8k
+# cap made long answers look "cut off mid-sentence" (Kennesaw 7.c, 2026-11-17).
+# This is only a safety ceiling against the model's context window (~200k tokens
+# ≈ 800k chars); real narratives (largest seen: ~110k chars) are sent whole.
+NARRATIVE_CHAR_LIMIT = 500_000
 MAX_TOKENS = 1200  # headroom so a verbose gaps/strengths reply isn't truncated mid-JSON
 
 _RETRYABLE_STATUSES = {429, 500, 502, 503, 504, 529}
@@ -78,6 +85,7 @@ def _build_prompt(
     library_file_names: Optional[list[str]] = None,
     retrieved_chunks: Optional[list] = None,
     web_evidence: Optional[list] = None,
+    figure_count: int = 0,
 ) -> str:
     parts = [
         "You are an experienced CSHSE accreditation reviewer evaluating whether",
@@ -88,7 +96,7 @@ def _build_prompt(
         f"  {spec.spec_text}",
         "",
         "=== NARRATIVE RESPONSE ===",
-        narrative_text[:CONTENT_CHAR_LIMIT] if narrative_text else "(none provided)",
+        narrative_text[:NARRATIVE_CHAR_LIMIT] if narrative_text else "(none provided)",
         "",
     ]
     if evidence_items:
@@ -151,6 +159,8 @@ def _build_prompt(
         "3. Documents/tables/forms: when the criterion asks that a document, table, or form",
         "   be PROVIDED, its EXISTENCE in the file library satisfies that — do not treat it as a",
         "   gap because a table's exact cell contents can't be read from the extracted text.",
+        "4. " + CONDITIONAL_RULE,
+        *(["5. " + FIGURES_RULE + f" ({figure_count} figure(s) attached above.)"] if figure_count else []),
         "",
         "Evaluate: does the combined narrative + supporting evidence above",
         "adequately address the Specification's prompt? Identify SPECIFIC gaps",
@@ -185,7 +195,7 @@ class CoverageReviewer:
         self._client = Anthropic(api_key=anthropic_key)
         self._model = model
 
-    def _call_with_retry(self, prompt: str):
+    def _call_with_retry(self, prompt: str, figures: Optional[list[Figure]] = None):
         """Backoff wrapper so transient 529/429/503 don't kill long batches."""
         delay = 1.0
         last_exc: Exception | None = None
@@ -195,7 +205,9 @@ class CoverageReviewer:
                     model=self._model,
                     max_tokens=MAX_TOKENS,
                     temperature=0,
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[{"role": "user", "content": (
+                        [*image_blocks(figures), {"type": "text", "text": prompt}] if figures else prompt
+                    )}],
                 )
             except (InternalServerError, RateLimitError) as exc:
                 last_exc = exc
@@ -216,15 +228,17 @@ class CoverageReviewer:
         library_file_names: Optional[list[str]] = None,
         institution_id: Optional[str] = None,
         submission_id: Optional[str] = None,
+        figures: Optional[list[Figure]] = None,
     ) -> CoverageReview:
         evidence_items = evidence_items or []
+        figures = figures or []
         retrieved = (
             retrieve_evidence_chunks(institution_id, submission_id or "", f"{spec.standard_title}\n{spec.spec_text}")
             if institution_id
             else []
         )
         web_evidence = _scrape_narrative_links(narrative_text)
-        prompt = _build_prompt(spec, narrative_text, evidence_items, library_file_names, retrieved, web_evidence)
+        prompt = _build_prompt(spec, narrative_text, evidence_items, library_file_names, retrieved, web_evidence, len(figures))
         # Retry the call+parse a few times: haiku occasionally emits non-JSON (and a
         # verbose gaps/strengths reply can cut the closing brace) — which used to
         # surface as a hard "LLM returned non-JSON response" gap (a false 0.0). A
@@ -233,7 +247,7 @@ class CoverageReviewer:
         raw = ""
         for _attempt in range(3):
             try:
-                msg = self._call_with_retry(prompt)
+                msg = self._call_with_retry(prompt, figures)
             except Exception as exc:
                 return CoverageReview(
                     standard_code=spec.standard_code,
@@ -295,7 +309,7 @@ def review_specs(
     assessment) AND by the on-demand "Check coverage" endpoint (to backfill an
     already-parsed submission without re-reading the document).
 
-    ``items``: ``[{standard_code, spec_code, narrative_text, evidence_items:[(title,body)]}]``
+    ``items``: ``[{standard_code, spec_code, narrative_text, evidence_items:[(title,body)], figures?:[Figure]}]``
     Returns a ``CoverageReview`` per item whose (std, spec) resolves to a known
     Handbook Specification for ``program_level``.
     """
@@ -317,7 +331,7 @@ def review_specs(
     results: list[CoverageReview] = []
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         futures = {
-            ex.submit(reviewer.review, spec, it.get("narrative_text") or "", it.get("evidence_items") or [], library_file_names, institution_id, submission_id): spec
+            ex.submit(reviewer.review, spec, it.get("narrative_text") or "", it.get("evidence_items") or [], library_file_names, institution_id, submission_id, it.get("figures") or []): spec
             for (spec, it) in tasks
         }
         done = 0
