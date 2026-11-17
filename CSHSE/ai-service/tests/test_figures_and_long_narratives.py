@@ -276,3 +276,42 @@ def test_cited_links_survive_html_to_text():
     items = [{"snippet": "see catalog", "htmlSnippet": '<p>See the <a href="https://catalog.kennesaw.edu/x?a=1&amp;b=2">catalog</a>.</p>'}]
     text, _ = narrative_text_and_figures(items)
     assert "Cited web links: https://catalog.kennesaw.edu/x?a=1&b=2" in text
+
+
+# --------------------------------------------------------------------------- spec text hygiene
+
+
+def test_catalog_has_no_leaked_next_standard_context():
+    from app.standards.loader import load_specifications
+
+    counts = {}
+    for lvl in ("associate", "bachelors", "masters"):
+        specs = load_specifications(lvl)
+        counts[lvl] = len(specs)
+        for s in specs:
+            assert "Context:" not in s.spec_text, (lvl, s.standard_code, s.spec_code)
+            assert not s.spec_text.endswith("(available at"), (lvl, s.standard_code, s.spec_code)
+    assert counts == {"associate": 86, "bachelors": 96, "masters": 87}
+    b = {(s.standard_code, s.spec_code): s.spec_text for s in load_specifications("bachelors")}
+    assert b[("18", "e")] == "Budget and financial management."
+    assert b[("19", "h")].endswith("(available at https://www.nationalhumanservices.org/ethical-standards-for-hsprofessionals).")
+
+
+def test_clean_spec_text_leaves_normal_text_alone_negative():
+    from app.standards.loader import clean_spec_text
+
+    t = "Provide syllabi for required seminars. Seminars must meet at least every two weeks."
+    assert clean_spec_text(t) == t
+    t2 = "Describe 1. intake and 2. assessment skills."  # numbered list, no 'Context:'
+    assert clean_spec_text(t2) == t2
+
+
+def test_section_eval_strips_leaked_context_from_criteria():
+    from app.section_eval.evaluate import evaluate_section
+
+    client = _FakeClient(_EVAL_REPLY)
+    crit = "Budget and financial management. 9. Client-Related Values and Attitudes Context: There are values and ethics intrinsic to the profession."
+    evaluate_section(institution_id="i", submission_id="", specs=[{"standardCode": "18", "specCode": "e", "criteria": crit}],
+                     narrative_html="<p>Budget course HS 4400.</p>", anthropic=client, settings=SimpleNamespace(anthropic_api_key="x"))
+    txt = _prompt_text(client.messages.calls[0])
+    assert "Budget and financial management." in txt and "Client-Related Values" not in txt

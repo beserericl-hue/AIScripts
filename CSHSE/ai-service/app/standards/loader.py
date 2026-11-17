@@ -154,7 +154,39 @@ BACCALAUREATE_SAMPLE: list[Specification] = [
 ]
 
 
+import re as _re
+from dataclasses import replace as _dc_replace
+
+# The Handbook-PDF extraction glued the NEXT curriculum standard's introduction
+# ("4. Discipline Inquiry and Information Literacy Context: The delivery of…")
+# onto the last spec of Standards 11-19, and in two places swallowed the NOHS
+# ethics URL ("(available at 10. Self-Development Context: …"). The AI reviewers
+# then faulted programs for not addressing text that isn't part of the spec
+# (Kennesaw 18.e, 2026-11-17). clean_spec_text strips that tail and restores the URL.
+_BLED_CONTEXT_RE = _re.compile(r"\s+\d{1,2}\.\s+[A-Z][A-Za-z,/\-\s]{3,80}?\s*Context:.*$", _re.DOTALL)
+_NOHS_ETHICS_URL = "https://www.nationalhumanservices.org/ethical-standards-for-hsprofessionals"
+
+
+def clean_spec_text(text: str) -> str:
+    """Remove a following standard's 'N. Title Context: …' paragraph that leaked
+    into a spec's text; restore the NOHS ethics URL the leak replaced."""
+    if not text:
+        return text
+    cleaned = _BLED_CONTEXT_RE.sub("", text).rstrip()
+    if cleaned != text.rstrip() and cleaned.endswith("(available at"):
+        cleaned = f"{cleaned} {_NOHS_ETHICS_URL})."
+    return cleaned
+
+
 def load_specifications(program_level: ProgramLevel) -> list[Specification]:
+    """Spec catalog for a level with spec text cleaned (see clean_spec_text)."""
+    return [
+        sp if clean_spec_text(sp.spec_text) == sp.spec_text else _dc_replace(sp, spec_text=clean_spec_text(sp.spec_text))
+        for sp in _load_raw_specifications(program_level)
+    ]
+
+
+def _load_raw_specifications(program_level: ProgramLevel) -> list[Specification]:
     """Return the active Specification list for a program level.
 
     Baccalaureate: returns the full 96-spec ``BACCALAUREATE_2025`` dataset
