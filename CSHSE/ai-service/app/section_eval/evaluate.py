@@ -25,6 +25,7 @@ from app.config import Settings, get_settings
 from app.section_eval.scrape import scrape_link, MAX_TEXT_CHARS
 from app.evidence.retrieve import retrieve_evidence_chunks
 from app.figures import CONDITIONAL_RULE, FIGURES_RULE, Figure, image_blocks, split_figures
+from app.standards.loader import clean_spec_text
 
 _HAIKU_MODEL = "claude-haiku-4-5"
 # Headroom so the assembled prompt (narrative ≤6k + bounded evidence ≤9k +
@@ -217,7 +218,9 @@ def _evaluate_one_spec(
     prompt = _build_prompt(
         standard_code=std,
         spec_code=sp,
-        criteria=str(spec.get("criteria", "")),
+        # Guard: never let a following standard's leaked "N. Title Context: …"
+        # paragraph be judged as part of this spec's criteria.
+        criteria=clean_spec_text(str(spec.get("criteria", ""))),
         narrative=narrative,
         evidence_texts=evidence_texts,
         files=files,
