@@ -22,8 +22,8 @@ export type HelpRole =
 export const HELP_SCREEN_TITLES: Record<string, string> = {
   'pc-dashboard': 'Program Coordinator dashboard',
   'self-study-home': 'Self-Study',
-  'editor-import': 'Import (Upload Files)',
-  'editor-import-file': 'Import file',
+  'editor-import': 'Import Self-Study',
+  'editor-import-file': 'Upload Appendices',
   'editor-review': 'Review drafts',
   'editor-introduction': 'Introduction',
   'editor-standards': 'Standards editor',

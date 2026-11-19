@@ -19,7 +19,7 @@
  */
 import { BulkUploadResults, BulkUploadRow } from '../../BulkUploadResults';
 import { scrollInPanel, resetHiddenFrames } from '../../../../../lib/scrollInPanel';
-import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, fillMissingText, suggestPlacementsForUnassigned, uploadEvidenceInBatches } from '../../bulkEvidenceUpload';
+import { EvidenceEntry, acceptAiSuggestions, applyAiSuggestions, entriesFromDataTransfer, entriesFromFileList, fillMissingText, suggestPlacementsForUnassigned, suggestedRows, uploadEvidenceInBatches } from '../../bulkEvidenceUpload';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileBox, Tag as TagIcon, Move, Check, Pencil, Trash2, Eye, Columns, Upload, Search, Loader2 } from 'lucide-react';
 import { openLinksInNewTab } from './linkNewTab';
@@ -2133,9 +2133,12 @@ function BulkEvidenceDropZone({
           const ai = await suggestPlacementsForUnassigned(submissionId, (done, remaining) =>
             setStatus(`${added} AI suggestions: ${done} read${remaining ? `, ${remaining} to go` : ''}…`)
           );
+          const merged = applyAiSuggestions(out.rows, ai.results);
+          setRows(merged);
+          const waiting = suggestedRows(merged).length;
           setStatus(ai.error
             ? `${added} AI suggestions stopped (${ai.error}) — run "Suggest placements with AI" in the File Library.`
-            : `${added} The AI suggested a specification for ${ai.placed} unplaced file${ai.placed === 1 ? '' : 's'}${ai.workingFiles ? ` and flagged ${ai.workingFiles} as working material, not evidence` : ''} — accept them in the File Library.`);
+            : `${added} The AI suggested a Standard for ${waiting} file${waiting === 1 ? '' : 's'}${ai.workingFiles ? ` and flagged ${ai.workingFiles} as working material, not evidence` : ''} — check the list below and click “File all as suggested”.`);
           await onUploaded();
         }
       } catch (err: any) {
@@ -2224,7 +2227,16 @@ function BulkEvidenceDropZone({
         />
       </div>
       {(rows || skipped.length > 0) && (
-        <div className="mt-2"><BulkUploadResults rows={rows || []} skipped={skipped} /></div>
+        <div className="mt-2"><BulkUploadResults
+          rows={rows || []}
+          skipped={skipped}
+          onAcceptSuggestions={async () => {
+            const next = await acceptAiSuggestions(submissionId, rows || []);
+            setRows(next);
+            setStatus('Filed. Every file is now under a Standard — see the Supporting File Library.');
+            await onUploaded();
+          }}
+        /></div>
       )}
       {status && (
         <p className="mt-2 text-xs text-gray-600" data-testid="bulk-evidence-status">

@@ -53,7 +53,7 @@ test.describe('CR-001 — both importers coexist on the editor toolbar', () => {
       page.getByRole('button', { name: /Import Document/i })
     ).toBeVisible({ timeout: 15_000 });
     await expect(
-      page.getByRole('button', { name: /Upload Files/i })
+      page.getByRole('button', { name: /Import Self-Study/i })
     ).toBeVisible();
   });
 
@@ -93,7 +93,7 @@ test.describe('CR-001 — both importers coexist on the editor toolbar', () => {
     await page.goto(`/self-study/${seed!.submissionId}`);
     await page.waitForLoadState('networkidle');
 
-    await page.getByRole('button', { name: /Upload Files/i }).click();
+    await page.getByRole('button', { name: /Import Self-Study/i }).click();
 
     // The wizard renders the Stepper with role="tablist" + aria-label
     // "Wizard steps". Scope to that to avoid colliding with the
@@ -118,7 +118,7 @@ test.describe('CR-001 — both importers coexist on the editor toolbar', () => {
     // Open Wizard first — scope the assertion to the Wizard steps tablist
     // so it doesn't collide with the SpecRail tablist also rendered on
     // the Review step.
-    await page.getByRole('button', { name: /Upload Files/i }).click();
+    await page.getByRole('button', { name: /Import Self-Study/i }).click();
     await expect(
       page.getByRole('tablist', { name: /wizard steps/i })
     ).toBeVisible({ timeout: 10_000 });

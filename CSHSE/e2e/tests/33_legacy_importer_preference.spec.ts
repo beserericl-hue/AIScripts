@@ -32,7 +32,7 @@ test.describe('CR-045 — hide legacy importer preference', () => {
     seed = undefined;
   });
 
-  test('legacy importer is hidden by default; Upload Files is present', async ({ page }) => {
+  test('legacy importer is hidden by default; Import Self-Study is present', async ({ page }) => {
     test.setTimeout(60_000);
     await loginAsSeededViaSso(page, seed!);
     await page.goto(`/self-study/${seed!.submissionId}`);
@@ -40,7 +40,7 @@ test.describe('CR-045 — hide legacy importer preference', () => {
 
     // The clean single-importer toolbar: "Upload Files" shows…
     await expect(
-      page.getByRole('button', { name: /Upload Files/i })
+      page.getByRole('button', { name: /Import Self-Study/i })
     ).toBeVisible({ timeout: 15_000 });
     // …and the legacy "Import Document" button is absent.
     await expect(

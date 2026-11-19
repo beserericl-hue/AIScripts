@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { BulkUploadResults, BulkUploadRow } from './BulkUploadResults';
-import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, fillMissingText, suggestPlacementsForUnassigned, uploadEvidenceInBatches } from './bulkEvidenceUpload';
+import { EvidenceEntry, acceptAiSuggestions, applyAiSuggestions, entriesFromDataTransfer, entriesFromFileList, fillMissingText, suggestPlacementsForUnassigned, suggestedRows, uploadEvidenceInBatches } from './bulkEvidenceUpload';
 
 // Mirror FileUpload.tsx's accept list + cap (those constants aren't exported).
 const ALLOWED_TYPES = [
@@ -165,9 +165,12 @@ export function ImportFilePanel({
         const ai = await suggestPlacementsForUnassigned(submissionId, (done, remaining) =>
           setBulkStatus(`${failedNote}AI suggestions: ${done} read${remaining ? `, ${remaining} to go` : ''}…`)
         );
+        const merged = applyAiSuggestions(out.rows, ai.results);
+        setBulkRows(merged);
+        const waiting = suggestedRows(merged).length;
         setBulkStatus(ai.error
           ? `${failedNote}AI suggestions stopped (${ai.error}) — run "Suggest placements with AI" in the File Library.`
-          : `${failedNote}The AI suggested a specification for ${ai.placed} unplaced file${ai.placed === 1 ? '' : 's'}${ai.workingFiles ? ` and flagged ${ai.workingFiles} as working material` : ''} — accept them in the Supporting File Library.`);
+          : `${failedNote}The AI suggested a Standard for ${waiting} file${waiting === 1 ? '' : 's'}${ai.workingFiles ? ` and flagged ${ai.workingFiles} as working material` : ''} — check the list below and click “File all as suggested”.`);
         refreshEvidence();
       }
     } catch (err: any) {
@@ -334,7 +337,7 @@ export function ImportFilePanel({
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
           <FilePlus2 className="h-4 w-4 text-teal-600" />
-          Import file
+          Upload Appendices
         </div>
         <button
           onClick={onClose}
@@ -348,11 +351,13 @@ export function ImportFilePanel({
 
       <div className="flex-1 overflow-auto p-4 space-y-4">
         <p className="text-xs text-gray-500">
-          Bring in one file (CV, syllabus, project, or a section draft) to preview
-          it and paste from it — it is filed under the specification you have
-          open. Dropping <b>several files</b> (a folder of appendices) files each
-          one where it belongs: name files “Standard 4 …”, “4.b …”, or by the
-          appendix your self-study cites (“Appendix IV 9 …”).
+          The one place for <b>all your appendices</b> and supporting files —
+          CVs, syllabi, projects, course materials, anything. Select many files
+          or a whole folder at once: each file is filed under the Standard your
+          self-study cites its appendix in (“Appendix XII …”), or one named
+          “Standard 4 …” / “4.b …”; anything else gets an AI suggestion you can
+          accept with one click. A single file can also be previewed and pasted
+          into the specification you have open.
         </p>
 
         {/* Drop zone */}
@@ -438,7 +443,16 @@ export function ImportFilePanel({
         )}
 
         {(bulkRows || bulkSkipped.length > 0) && (
-          <BulkUploadResults rows={bulkRows || []} skipped={bulkSkipped} />
+          <BulkUploadResults
+            rows={bulkRows || []}
+            skipped={bulkSkipped}
+            onAcceptSuggestions={async () => {
+              const next = await acceptAiSuggestions(submissionId, bulkRows || []);
+              setBulkRows(next);
+              setBulkStatus('Filed. Every file is now under a Standard — see the Supporting File Library.');
+              refreshEvidence();
+            }}
+          />
         )}
 
         {error && (

@@ -81,7 +81,7 @@ test.describe('Self-Study editor — workflow sequencing', () => {
     ).toBeVisible({ timeout: 20_000 });
   });
 
-  test('clicking Upload Files from Review starts a fresh import (no stale Parse screen)', async ({ page }) => {
+  test('clicking Import Self-Study from Review starts a fresh import (no stale Parse screen)', async ({ page }) => {
     test.setTimeout(60_000);
     await loginAsSeededViaSso(page, seed!);
     await page.goto(`/self-study/${seed!.submissionId}`);
@@ -92,7 +92,7 @@ test.describe('Self-Study editor — workflow sequencing', () => {
     ).toBeVisible({ timeout: 20_000 });
 
     // Click Upload Files to import ANOTHER document.
-    await page.getByRole('button', { name: /Upload Files/i }).click();
+    await page.getByRole('button', { name: /Import Self-Study/i }).click();
 
     // The wizard opens on the Upload step — a fresh start…
     await expect(
