@@ -143,6 +143,11 @@ export function UploadStep(): JSX.Element {
         Importing a standalone CV, syllabus, or project? Mark it below and we&rsquo;ll file it directly &mdash;
         no parsing.
       </p>
+      <p className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-800" data-testid="upload-appendices-hint">
+        Uploading your <b>appendices</b>? Use <b>Upload Appendices</b> in the toolbar above &mdash; it takes
+        any number of files or whole folders at once (all appendix types, not just CVs, syllabi and
+        projects) and files each one under its Standard.
+      </p>
 
       {directStoredResult && (
         <div className="flex items-start gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">

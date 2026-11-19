@@ -164,23 +164,80 @@ export async function uploadEvidenceInBatches(
  * still unassigned (server works 20 at a time; loop while some remain). The
  * suggestions are tentative — shown in the File Library with Accept.
  */
+export interface AiPlacementResult {
+  id: string;
+  std?: string | null;
+  spec?: string | null;
+  confidence?: number;
+  kind?: string;
+  reason?: string;
+  error?: string;
+}
+
 export async function suggestPlacementsForUnassigned(
   submissionId: string,
   onProgress?: (done: number, remaining: number) => void
-): Promise<{ processed: number; placed: number; workingFiles: number; error?: string }> {
+): Promise<{ processed: number; placed: number; workingFiles: number; results: AiPlacementResult[]; error?: string }> {
   let processed = 0, placed = 0, workingFiles = 0;
+  const results: AiPlacementResult[] = [];
   try {
     for (let guard = 0; guard < 50; guard++) {
       const res = await api.post(`/api/submissions/${submissionId}/evidence/ai-place-unassigned`, {}, { timeout: 600_000 });
       const d = res.data || {};
       processed += d.processed || 0; placed += d.placed || 0; workingFiles += d.workingFiles || 0;
+      if (Array.isArray(d.results)) results.push(...d.results);
       onProgress?.(processed, d.remaining || 0);
       if (!d.remaining || !d.processed) break;
     }
-    return { processed, placed, workingFiles };
+    return { processed, placed, workingFiles, results };
   } catch (err: any) {
-    return { processed, placed, workingFiles, error: err?.response?.data?.error || err?.message || 'AI placement failed' };
+    return { processed, placed, workingFiles, results, error: err?.response?.data?.error || err?.message || 'AI placement failed' };
   }
+}
+
+/**
+ * Fold the AI pass back into the per-file upload list. Without this the list
+ * kept saying "Unassigned — choose a Standard" for every file even after the
+ * AI had read them and suggested a specification (Kennesaw, 2026-11-19).
+ */
+export function applyAiSuggestions(rows: BulkUploadRow[], results: AiPlacementResult[]): BulkUploadRow[] {
+  const byId = new Map(results.filter((r) => r && r.id && !r.error).map((r) => [String(r.id), r]));
+  return rows.map((row) => {
+    if (row.placedStd || row.duplicateOf || row.error || row.skippedSelfStudy || !row.fileId) return row;
+    const r = byId.get(String(row.fileId));
+    if (!r) return row;
+    if (r.kind === 'working_file') {
+      return { ...row, workingFile: true, aiSuggested: false, aiSuggestionRationale: r.reason ? `AI: ${r.reason}` : row.aiSuggestionRationale };
+    }
+    if (!r.std) return row;
+    const pct = typeof r.confidence === 'number' ? ` (${Math.round(r.confidence * 100)}% sure)` : '';
+    return {
+      ...row,
+      resolvedStd: String(r.std),
+      resolvedSpec: r.spec ? String(r.spec) : undefined,
+      aiSuggested: true,
+      aiSuggestionRationale: r.reason ? `AI${pct}: ${r.reason}` : row.aiSuggestionRationale,
+    };
+  });
+}
+
+/** Rows whose AI suggestion is still waiting to be accepted. */
+export function suggestedRows(rows: BulkUploadRow[]): BulkUploadRow[] {
+  return rows.filter((r) => r.aiSuggested && !r.placedStd && r.fileId && r.resolvedStd);
+}
+
+/**
+ * File every listed AI suggestion (the coordinator clicked "File all … as
+ * suggested"). Returns the rows with those files marked as filed.
+ */
+export async function acceptAiSuggestions(submissionId: string, rows: BulkUploadRow[]): Promise<BulkUploadRow[]> {
+  const ids = suggestedRows(rows).map((r) => String(r.fileId));
+  if (!ids.length) return rows;
+  await api.post(`/api/submissions/${submissionId}/evidence/accept-ai-placements`, { evidenceIds: ids });
+  const done = new Set(ids);
+  return rows.map((r) => (r.fileId && done.has(String(r.fileId))
+    ? { ...r, placedStd: r.resolvedStd, placedSpec: r.resolvedSpec || null, aiSuggested: false, acceptedAi: true }
+    : r));
 }
 
 

@@ -343,11 +343,11 @@ function AIImportTabButton({
           : activeView === 'ai-import' ? 'bg-teal-100 text-teal-700' : 'text-gray-600 hover:bg-gray-100'
       }`}
       title={canImport
-        ? 'Upload Files — drag or select your self-study document(s) and let the AI parse, tag, and place the content. This is step 1 of the guided import.'
+        ? 'Import Self-Study — drag or select your self-study document and let the AI parse, tag, and place the content. This is step 1 of the guided import. (Appendices and other supporting files go in Upload Appendices.)'
         : 'A superuser must impersonate a Program Coordinator to import. Use Switch Role to view as a PC, then upload.'}
     >
       <Upload className="w-4 h-4 flex-shrink-0" />
-      Upload Files
+      Import Self-Study
       {/* CR-045 — the "AI" badge only appears when the legacy importer is
           also visible (the two need disambiguating). When legacy is
           hidden, this is the only importer and the badge is just noise. */}
@@ -2543,7 +2543,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   <div className="fixed inset-0 z-30" onClick={() => setToolbarMenuOpen(false)} />
                   <div className="absolute left-0 mt-1 z-40 w-56 rounded-md border border-gray-200 bg-white py-1 shadow-lg text-sm" role="menu">
                     {([
-                      isProgramCoordinator && !isSubmissionLocked && canImport && { label: 'Import file', fn: () => setShowImportFile(true) },
+                      isProgramCoordinator && !isSubmissionLocked && canImport && { label: 'Upload Appendices', fn: () => setShowImportFile(true) },
                       isProgramCoordinator && !isSubmissionLocked && { label: 'Review drafts', fn: () => setActiveView('review-surface') },
                       { label: 'Introduction', fn: () => setActiveView('introduction') },
                       { label: 'Standards', fn: () => setActiveView('standards') },
@@ -2604,11 +2604,11 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                           : 'text-gray-600 hover:bg-gray-100'
                       }`}
                       title={canImport
-                        ? 'Import file — bring in one CV, syllabus, project, or section draft and paste its content into a standard, or select several files at once and each is filed under the Standard it belongs to.'
+                        ? 'Upload Appendices — the one place for ALL your appendices and supporting files (CVs, syllabi, projects, course materials, anything). Select many files or a whole folder; each is filed under the Standard your self-study cites it in, or the AI suggests one.'
                         : 'A superuser must impersonate a Program Coordinator to import. Use Switch Role to view as a PC.'}
                     >
                       <FileUp className="w-4 h-4 flex-shrink-0" />
-                      Import file
+                      Upload Appendices
                     </button>
                   </div>
                 </div>
@@ -4455,7 +4455,11 @@ function ProgressIndicator({ submission }: { submission?: SubmissionData }) {
   const percent = Math.round((progress.completed / progress.total) * 100);
 
   return (
-    <div className="flex items-center gap-3">
+    <div
+      className="flex items-center gap-3"
+      data-testid="standards-written-progress"
+      title={`${progress.completed} of ${progress.total} Standards have text in the Self-Study editor. A Standard counts once any of its specifications has content. Content you imported stays in Review (Drafts) until you approve it there — approving it fills the editor and moves this bar. Uploading files does not change it.`}
+    >
       <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
         <div
           className="h-full bg-teal-500 transition-all duration-300"
@@ -4463,7 +4467,7 @@ function ProgressIndicator({ submission }: { submission?: SubmissionData }) {
         />
       </div>
       <span className="text-sm text-gray-600">
-        {progress.completed}/{progress.total} Standards
+        {progress.completed} of {progress.total} Standards written
       </span>
     </div>
   );

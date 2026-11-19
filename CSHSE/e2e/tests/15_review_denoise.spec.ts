@@ -45,7 +45,7 @@ test.describe('CR-064 — Review is de-noised', () => {
 
     // CR-070 — each card has a per-card "Import file" control (scoped to that
     // card's own spec; opens a modal on use).
-    await expect(page.getByText('Import file').first()).toBeVisible();
+    await expect(page.getByText('Upload Appendices').first()).toBeVisible();
     await expect(page.getByTestId('card-upload-input').first()).toBeAttached();
 
     // CR-066 — the spec-level approve button is renamed + reveals the outcome.
