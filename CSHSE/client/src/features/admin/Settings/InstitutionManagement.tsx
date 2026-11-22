@@ -20,6 +20,7 @@ import {
   UserCheck,
   FileText
 } from 'lucide-react';
+import { ALL_INSTITUTIONS_LIMIT } from '../../../lib/institutionsQuery';
 
 interface Institution {
   _id: string;
@@ -108,7 +109,7 @@ export function InstitutionManagement() {
   const { data: institutionsData, isLoading } = useQuery({
     queryKey: ['institutions'],
     queryFn: async () => {
-      const response = await api.get('/api/institutions');
+      const response = await api.get('/api/institutions', { params: { limit: ALL_INSTITUTIONS_LIMIT } });
       return response.data;
     }
   });

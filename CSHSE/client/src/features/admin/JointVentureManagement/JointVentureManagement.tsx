@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
 import { Loader2, Plus, Archive, X, Check } from 'lucide-react';
+import { ALL_INSTITUTIONS_LIMIT } from '../../../lib/institutionsQuery';
 
 // ---------------------------------------------------------------------------
 // CR-019 / Sprint 8.2 — Admin Joint Venture management.
@@ -256,7 +257,7 @@ export function JointVentureManagement(): JSX.Element {
   const institutionsQ = useQuery({
     queryKey: ['institutions-lite'],
     queryFn: async () => {
-      const r = await api.get('/api/institutions');
+      const r = await api.get('/api/institutions', { params: { limit: ALL_INSTITUTIONS_LIMIT } });
       const list = (r.data?.institutions || r.data || []) as any[];
       return list.map((i) => ({
         _id: String(i._id),
