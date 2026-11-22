@@ -12,6 +12,7 @@ import { HintLayer } from '../features/tour/HintLayer';
 import { TourRunner } from '../features/tour/TourRunner';
 import { TourAutoStart } from '../features/tour/TourAutoStart';
 import RoleSwitcher from './RoleSwitcher';
+import { impersonationBannerLabel } from './impersonationBanner';
 
 // Simple icon components
 const HomeIcon = () => (
@@ -255,9 +256,13 @@ export default function Layout() {
               </svg>
               <span className="text-sm font-medium">
                 Viewing as:{' '}
-                {impersonation.impersonatedUser
-                  ? `${impersonation.impersonatedUser.firstName} ${impersonation.impersonatedUser.lastName} (${impersonation.impersonatedRole?.replace('_', ' ')})`
-                  : impersonation.impersonatedRole?.replace('_', ' ')}
+                <span data-testid="impersonation-banner-label">
+                  {impersonationBannerLabel({
+                    impersonatedUser: impersonation.impersonatedUser,
+                    impersonatedRole: impersonation.impersonatedRole,
+                    activeContext: useAuthStore.getState().getActiveContext(),
+                  })}
+                </span>
               </span>
             </div>
             <button
