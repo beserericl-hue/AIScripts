@@ -16,7 +16,11 @@ describe('impersonation banner label', () => {
       activeContext: { role: 'program_coordinator', institutionName: 'Kennesaw State University' },
     })).toBe('Reader Two (Program Coordinator · Kennesaw State University)');
   });
-  it('NEGATIVE: no active context → the impersonated role, no institution', () => {
+  it('no role chosen yet → primary role at the primary institution (matches the switcher)', () => {
+    expect(impersonationBannerLabel({ impersonatedUser: { ...reader2, institutionName: 'Kennesaw State University' }, impersonatedRole: 'program_coordinator', activeContext: null }))
+      .toBe('Reader Two (Program Coordinator · Kennesaw State University)');
+  });
+  it('NEGATIVE: no active context and no institution (e.g. global reader) → role only', () => {
     expect(impersonationBannerLabel({ impersonatedUser: reader2, impersonatedRole: 'lead_reader', activeContext: null }))
       .toBe('Reader Two (Lead Reader)');
   });
