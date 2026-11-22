@@ -21,7 +21,7 @@ export function roleLabel(role?: string | null): string {
 }
 
 export function impersonationBannerLabel(args: {
-  impersonatedUser?: { firstName?: string; lastName?: string } | null;
+  impersonatedUser?: { firstName?: string; lastName?: string; institutionName?: string } | null;
   impersonatedRole?: string | null;
   activeContext?: { role: string; institutionName?: string } | null;
 }): string {
@@ -29,6 +29,9 @@ export function impersonationBannerLabel(args: {
   const role = roleLabel(activeContext?.role || impersonatedRole);
   if (!impersonatedUser) return role;
   const name = `${impersonatedUser.firstName || ''} ${impersonatedUser.lastName || ''}`.trim();
-  const where = activeContext?.institutionName ? ` · ${activeContext.institutionName}` : '';
+  // No role chosen yet → the user's primary role at their primary institution,
+  // which is exactly what the header's role switcher shows.
+  const inst = activeContext ? activeContext.institutionName : impersonatedUser.institutionName;
+  const where = inst ? ` · ${inst}` : '';
   return `${name} (${role}${where})`;
 }
