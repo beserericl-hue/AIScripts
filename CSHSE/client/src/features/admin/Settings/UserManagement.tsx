@@ -20,6 +20,7 @@ import {
   Building2,
   ShieldCheck
 } from 'lucide-react';
+import { ALL_INSTITUTIONS_LIMIT } from '../../../lib/institutionsQuery';
 
 interface RoleAssignment {
   role: 'program_coordinator' | 'reader' | 'lead_reader';
@@ -161,7 +162,7 @@ export function UserManagement() {
   const { data: institutionsData } = useQuery({
     queryKey: ['institutions'],
     queryFn: async () => {
-      const response = await api.get('/api/institutions');
+      const response = await api.get('/api/institutions', { params: { limit: ALL_INSTITUTIONS_LIMIT } });
       return response.data;
     }
   });

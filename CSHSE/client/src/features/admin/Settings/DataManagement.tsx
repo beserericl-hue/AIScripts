@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Trash2, Loader2, Building2, CheckCircle, HardDrive, Search, Zap } from 'lucide-react';
 import { api } from '../../../services/api';
+import { ALL_INSTITUTIONS_LIMIT } from '../../../lib/institutionsQuery';
 
 interface Institution {
   _id: string;
@@ -51,7 +52,7 @@ export function DataManagement() {
   const { data: institutions, isLoading: institutionsLoading } = useQuery({
     queryKey: ['institutions-all'],
     queryFn: async () => {
-      const response = await api.get('/api/institutions');
+      const response = await api.get('/api/institutions', { params: { limit: ALL_INSTITUTIONS_LIMIT } });
       return response.data.institutions as Institution[];
     }
   });
