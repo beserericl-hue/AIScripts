@@ -24,7 +24,7 @@ describe('impersonation banner label', () => {
     expect(impersonationBannerLabel({ impersonatedUser: reader2, impersonatedRole: 'lead_reader', activeContext: null }))
       .toBe('Reader Two (Lead Reader)');
   });
-  it('NEGATIVE: role-only impersonation → just the role', () => {
-    expect(impersonationBannerLabel({ impersonatedUser: null, impersonatedRole: 'program_coordinator' })).toBe('Program Coordinator');
+  it('role-only impersonation → the role, marked as a read-only preview', () => {
+    expect(impersonationBannerLabel({ impersonatedUser: null, impersonatedRole: 'program_coordinator' })).toBe('Program Coordinator · role preview (read-only)');
   });
 });

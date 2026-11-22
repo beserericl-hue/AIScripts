@@ -98,6 +98,29 @@ export function boardPathAllowed(url: string): boolean {
   });
 }
 
+/**
+ * Routes a role-preview session may still write to: its own session plumbing
+ * (impersonation start/stop audit, logout, preferences), notifications, bug
+ * reports, help chat and help videos. Everything else is read-only in a preview.
+ */
+const ROLE_PREVIEW_WRITE_ALLOWED = [
+  '/api/auth/',
+  '/api/notifications',
+  '/api/bug-reports',
+  '/api/webhooks/help/',
+  '/api/help-videos',
+];
+export function rolePreviewWriteBlocked(method: string, url: string, effectiveRole: string): boolean {
+  if (effectiveRole === 'admin') return false;
+  const m = String(method || '').toUpperCase();
+  if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return false;
+  const path = String(url || '').split('?')[0];
+  return !ROLE_PREVIEW_WRITE_ALLOWED.some((p) => {
+    const base = p.replace(/\/$/, '');
+    return path === base || path.startsWith(`${base}/`);
+  });
+}
+
 /** Decode a header value the client URI-encoded (names may contain spaces/unicode). */
 function decodeHeader(v: string | undefined): string | undefined {
   if (!v) return undefined;
@@ -199,11 +222,14 @@ export const authenticate = async (
             actualUserId: user._id.toString(),
             actualName: actorName,
             actualRole: user.role,
-            impersonatedRole: impersonatedRole || undefined,
-            impersonatedUserId:
-              impersonatedUserId || (assumedSpecificUser ? identityUser._id.toString() : undefined),
-            impersonatedUserName:
-              impersonatedUserName || (assumedSpecificUser ? identityName : undefined)
+            // The ROLE IN EFFECT (the target's DB role when a user was assumed,
+            // never a client-supplied header that may disagree with it).
+            impersonatedRole: effectiveRole,
+            // Only a user that was actually LOADED is recorded. An unknown /
+            // malformed X-Impersonated-User-Id falls back to a role preview and
+            // must not leak a bogus id into scoping or the audit trail.
+            impersonatedUserId: assumedSpecificUser ? identityUser._id.toString() : undefined,
+            impersonatedUserName: assumedSpecificUser ? (identityName || impersonatedUserName) : undefined
           }
         : undefined;
 
@@ -236,6 +262,17 @@ export const authenticate = async (
         realIsSuperuser: user.isSuperuser,
         impersonation
       };
+      // ROLE PREVIEW IS READ-ONLY. Impersonating a role without choosing a
+      // specific user has no identity or institution to act as, so any write
+      // would be stamped with the superuser and land outside every tenant.
+      // Refuse writes (except the admin role, and the session plumbing every
+      // page needs) — to change data as someone, impersonate that user.
+      if (isImpersonating && !assumedSpecificUser && rolePreviewWriteBlocked(req.method, req.originalUrl, effectiveRole)) {
+        return res.status(403).json({
+          error: 'Role preview is read-only. To make changes as someone, use Switch Role → Impersonate a Specific User.',
+          code: 'ROLE_PREVIEW_READ_ONLY',
+        });
+      }
       applyActiveContext(req, isImpersonating && !assumedSpecificUser);
       narrowBoardSession(req);
       if (req.user.role === BOARD_ROLE && !boardPathAllowed(req.originalUrl)) {

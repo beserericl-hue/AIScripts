@@ -322,7 +322,7 @@ function parsePartMarks(raw: unknown): PartMark[] {
 
 /** The effective reviewer id (the impersonated user when a SU is impersonating). */
 function effectiveReviewerId(req: AuthenticatedRequest): string {
-  return (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id || '';
+  return req.user?.id || '';
 }
 
 async function readerMayAccess(req: AuthenticatedRequest, submissionId: string): Promise<boolean> {

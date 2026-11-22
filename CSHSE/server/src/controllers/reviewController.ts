@@ -611,7 +611,7 @@ export const assignReaders = async (req: AuthenticatedRequest, res: Response) =>
     // lead reader, or someone who already holds an active assignment to it.
     const isElevatedAssigner = req.user?.role === 'admin' || (req.user as any)?.isSuperuser === true;
     if (!isElevatedAssigner) {
-      const effId = String((req.user as any)?.impersonation?.impersonatedUserId || req.user?.id || '');
+      const effId = String(req.user?.id || '');
       const inst = submission.institutionId
         ? await Institution.findById(submission.institutionId).select('assignedLeadReaderId').lean()
         : null;

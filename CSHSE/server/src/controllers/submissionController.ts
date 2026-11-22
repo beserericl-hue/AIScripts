@@ -130,7 +130,7 @@ export const getSubmission = async (req: AuthenticatedRequest, res: Response) =>
           status: submission.status
         });
       }
-      const effectiveReaderId = req.user?.impersonation?.impersonatedUserId || req.user?.id;
+      const effectiveReaderId = req.user?.id;
       const assigned = await Assignment.exists({
         submissionId: submission._id,
         userId: effectiveReaderId,
@@ -1573,7 +1573,7 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
       const pcInsts = (includePc ? institutionIdsWithRole(req.user, 'program_coordinator') : [])
         .filter((id) => !wantInst || String(id) === wantInst)
         .map((id) => new mongoose.Types.ObjectId(id));
-      const effectiveReaderId = req.user?.impersonation?.impersonatedUserId || req.user?.id;
+      const effectiveReaderId = req.user?.id;
       const assignments = includeAssigned
         ? await Assignment.find({ userId: effectiveReaderId, status: 'active' }).select('submissionId').lean()
         : [];
@@ -1982,10 +1982,9 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
     // when reviewers are assigned the status advances to 'readers_assigned'.
     // Mirrors leadReader/assignedReaders onto the submission.
     try {
-      const imp = (req.user as any)?.impersonation;
       const { assignedUsers } = await ensureInstitutionReaderAssignments(submission, {
-        id: imp?.impersonatedUserId || req.user!.id,
-        name: imp?.impersonatedUserName || req.user!.name || req.user!.email,
+        id: req.user!.id,
+        name: req.user!.name || req.user!.email,
         role: req.user!.role
       });
       if (assignedUsers.length > 0) {
@@ -2042,9 +2041,8 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
     // needs-improvement remains. Non-fatal: a note failure never blocks submit.
     try {
       const niNotes: any[] = Array.isArray(req.body?.needsImprovementNotes) ? req.body.needsImprovementNotes : [];
-      const imp = (req.user as any)?.impersonation;
-      const pcId = imp?.impersonatedUserId || req.user!.id;
-      const pcName = imp?.impersonatedUserName || req.user!.name || req.user!.email || 'Program Coordinator';
+      const pcId = req.user!.id;
+      const pcName = req.user!.name || req.user!.email || 'Program Coordinator';
       const commentDocs: any[] = [];
       for (const n of niNotes) {
         const note = String(n?.note || '').trim();

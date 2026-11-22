@@ -178,9 +178,8 @@ export const createComment = async (req: AuthenticatedRequest, res: Response) =>
 
     // When a superuser impersonates a reader/lead reader, act AS that user:
     // assignment + authorship use the impersonated id, not the superuser's.
-    const imp = (req.user as any)?.impersonation;
-    const effectiveUserId = imp?.impersonatedUserId || req.user!.id;
-    const effectiveName = imp?.impersonatedUserName || req.user!.name;
+    const effectiveUserId = req.user!.id;
+    const effectiveName = req.user!.name;
 
     // Verify the (effective) user is assigned to this submission (superusers
     // bypass — but note: while impersonating a non-admin, isSuperuser is false,
@@ -321,9 +320,8 @@ export const addReply = async (req: AuthenticatedRequest, res: Response) => {
     // When a superuser impersonates a reader/lead reader, attribute the reply to
     // the impersonated user (mirrors createComment). authorRole must be one of the
     // enum values; an admin/superuser replying is recorded as a lead reader.
-    const imp = (req.user as any)?.impersonation;
-    const effectiveUserId = imp?.impersonatedUserId || req.user!.id;
-    const effectiveName = imp?.impersonatedUserName || req.user!.name;
+    const effectiveUserId = req.user!.id;
+    const effectiveName = req.user!.name;
     const reply = {
       authorId: new mongoose.Types.ObjectId(effectiveUserId),
       authorName: effectiveName,
