@@ -140,7 +140,7 @@ export const listEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
   // When a superuser impersonates a reader/lead reader, act AS that user so the
   // assignment check uses the impersonated id (matches the reader-report/comment
   // endpoints). For a real reader, impersonation is absent and this is their id.
-  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userId = req.user?.id;
   const userRole = req.user?.role;
   // Treat an impersonating superuser (realIsSuperuser, kept when effective
   // isSuperuser is dropped during impersonation) as a superuser for evidence
@@ -225,7 +225,7 @@ const REQUIRED_DOC_MARKER = /^\[\[REQUIRED_DOC:([a-z0-9-]+)\]\]\s*(.*)$/i;
 
 export const listRequiredDocuments = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId } = req.params;
-  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userId = req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
   if (!userId || !userRole) throw new AuthorizationError('Authentication required');
@@ -262,7 +262,7 @@ export const listRequiredDocuments = asyncHandler(async (req: AuthenticatedReque
  */
 export const getEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
-  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userId = req.user?.id;
   const userRole = req.user?.role;
   // Treat an impersonating superuser (realIsSuperuser, kept when effective
   // isSuperuser is dropped during impersonation) as a superuser for evidence
@@ -309,7 +309,7 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const { submissionId } = req.params;
   const { standardCode, specCode, description, replaceExisting } = req.body;
   const file = req.file;
-  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userId = req.user?.id;
   const userRole = req.user?.role;
   // Treat an impersonating superuser (realIsSuperuser, kept when effective
   // isSuperuser is dropped during impersonation) as a superuser for evidence
@@ -528,7 +528,7 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
 export const addUrlEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId } = req.params;
   const { standardCode, specCode, url, title, description } = req.body;
-  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userId = req.user?.id;
   const userRole = req.user?.role;
   // Treat an impersonating superuser (realIsSuperuser, kept when effective
   // isSuperuser is dropped during impersonation) as a superuser for evidence
@@ -603,7 +603,7 @@ export const addUrlEvidence = asyncHandler(async (req: AuthenticatedRequest, res
 export const updateEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
   const { standardCode, specCode, description, title } = req.body;
-  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userId = req.user?.id;
   const userRole = req.user?.role;
   // Treat an impersonating superuser (realIsSuperuser, kept when effective
   // isSuperuser is dropped during impersonation) as a superuser for evidence
@@ -684,7 +684,7 @@ export const updateEvidence = asyncHandler(async (req: AuthenticatedRequest, res
  */
 export const deleteEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
-  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userId = req.user?.id;
   const userRole = req.user?.role;
   // Treat an impersonating superuser (realIsSuperuser, kept when effective
   // isSuperuser is dropped during impersonation) as a superuser for evidence
@@ -741,7 +741,7 @@ export const deleteEvidence = asyncHandler(async (req: AuthenticatedRequest, res
  */
 export const downloadEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
-  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userId = req.user?.id;
   const userRole = req.user?.role;
   // Treat an impersonating superuser (realIsSuperuser, kept when effective
   // isSuperuser is dropped during impersonation) as a superuser for evidence
@@ -864,7 +864,7 @@ export const downloadEvidence = asyncHandler(async (req: AuthenticatedRequest, r
  */
 export const getEvidencePublicUrl = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
-  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userId = req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
   if (!userId || !userRole) throw new AuthorizationError('Authentication required');
@@ -896,7 +896,7 @@ export const getEvidencePublicUrl = asyncHandler(async (req: AuthenticatedReques
 export const linkEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
   const { standardCode, specCode } = req.body;
-  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userId = req.user?.id;
   const userRole = req.user?.role;
   // Treat an impersonating superuser (realIsSuperuser, kept when effective
   // isSuperuser is dropped during impersonation) as a superuser for evidence
@@ -945,7 +945,7 @@ export const linkEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
  */
 export const unlinkEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
-  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userId = req.user?.id;
   const userRole = req.user?.role;
   // Treat an impersonating superuser (realIsSuperuser, kept when effective
   // isSuperuser is dropped during impersonation) as a superuser for evidence
@@ -990,7 +990,7 @@ export const unlinkEvidence = asyncHandler(async (req: AuthenticatedRequest, res
  */
 export const getEvidenceStats = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId } = req.params;
-  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userId = req.user?.id;
   const userRole = req.user?.role;
   // Treat an impersonating superuser (realIsSuperuser, kept when effective
   // isSuperuser is dropped during impersonation) as a superuser for evidence
@@ -1101,7 +1101,7 @@ function formatBytesLabel(bytes: number): string {
  */
 export const previewEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
-  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userId = req.user?.id;
   const userRole = req.user?.role;
   // Treat an impersonating superuser (realIsSuperuser, kept when effective
   // isSuperuser is dropped during impersonation) as a superuser for evidence

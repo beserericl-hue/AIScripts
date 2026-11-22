@@ -16,7 +16,7 @@ import mongoose from 'mongoose';
  * institution's. Admins/superusers bypass this (they see all).
  */
 async function overseenSubmissionIds(req: AuthenticatedRequest): Promise<string[]> {
-  const effId = String((req.user as any)?.impersonation?.impersonatedUserId || req.user?.id || '');
+  const effId = String(req.user?.id || '');
   if (!effId) return [];
   const [assigned, designatedInsts] = await Promise.all([
     Assignment.find({ userId: effId, status: 'active' }).distinct('submissionId'),

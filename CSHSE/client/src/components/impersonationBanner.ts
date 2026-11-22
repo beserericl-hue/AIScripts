@@ -27,7 +27,8 @@ export function impersonationBannerLabel(args: {
 }): string {
   const { impersonatedUser, impersonatedRole, activeContext } = args;
   const role = roleLabel(activeContext?.role || impersonatedRole);
-  if (!impersonatedUser) return role;
+  // Role-only impersonation: no identity to act as → the server makes it read-only.
+  if (!impersonatedUser) return `${role} · role preview (read-only)`;
   const name = `${impersonatedUser.firstName || ''} ${impersonatedUser.lastName || ''}`.trim();
   // No role chosen yet → the user's primary role at their primary institution,
   // which is exactly what the header's role switcher shows.

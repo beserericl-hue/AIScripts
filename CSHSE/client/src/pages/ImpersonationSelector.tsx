@@ -227,7 +227,7 @@ export default function ImpersonationSelector() {
                 <div>
                   <div className="font-semibold text-gray-900">Impersonate a Role</div>
                   <div className="text-sm text-gray-500">
-                    View the system as Admin, Lead Reader, Reader, or Program Coordinator
+                    Read-only preview of what a role sees. To make changes as someone, impersonate a specific user.
                   </div>
                 </div>
               </button>

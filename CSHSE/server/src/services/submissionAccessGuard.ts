@@ -35,7 +35,7 @@ export interface SubmissionAccessResult {
 
 /** The impersonation-aware effective user id (reader Assignments key on this). */
 export function effectiveUserId(req: AuthenticatedRequest): string {
-  return String(req.user?.impersonation?.impersonatedUserId || req.user?.id || '');
+  return String(req.user?.id || '');
 }
 
 /**
